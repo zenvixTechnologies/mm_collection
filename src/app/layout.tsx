@@ -5,11 +5,10 @@ import { AnnouncementBar } from "@/components/layout/AnnouncementBar";
 import { CartDrawer } from "@/components/layout/CartDrawer";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
+import { IntroGate } from "@/components/home/IntroGate";
 import { MobileMenu } from "@/components/layout/MobileMenu";
 import { Providers } from "@/components/layout/Providers";
 import { RouteProgress } from "@/components/layout/RouteProgress";
-import { SplashController } from "@/components/layout/SplashController";
-import { SplashScreen } from "@/components/layout/SplashScreen";
 import { SearchOverlay } from "@/components/layout/SearchOverlay";
 import { QuickAddModal } from "@/components/products/QuickAddModal";
 import { Toaster } from "@/components/ui/Toaster";
@@ -56,9 +55,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en-IN" className={`${dmSans.variable} ${cormorant.variable}`} suppressHydrationWarning>
       <body>
-        <SplashScreen />
+        {/* Brand intro: plays once per session, only when landing on the homepage */}
+        <IntroGate />
         <Providers>
-          <SplashController />
           <Suspense fallback={null}>
             <RouteProgress />
           </Suspense>
