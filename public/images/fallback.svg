@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000" viewBox="0 0 800 1000">
+  <rect width="800" height="1000" fill="#F2F0ED"/>
+  <g fill="none" stroke="#C9C3BB" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M330 330 L400 290 L470 330 L540 370 L510 430 L470 410 L470 640 L330 640 L330 410 L290 430 L260 370 Z"/>
+    <path d="M370 300 Q400 340 430 300"/>
+  </g>
+  <text x="400" y="730" text-anchor="middle" font-family="Georgia, serif" font-size="34" letter-spacing="6" fill="#9A9A9A">M&amp;M COLLECTIONS</text>
+</svg>
