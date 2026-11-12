@@ -3,7 +3,7 @@
 import { CheckCircle2, Loader2, MapPin, XCircle } from "lucide-react";
 import { useState } from "react";
 
-type Result = { ok: true; message: string; cod: boolean } | { ok: false; message: string };
+type Result = { ok: true; message: string } | { ok: false; message: string };
 
 /**
  * DEMO delivery estimate — uses simple PIN code prefix rules, not a real courier API.
@@ -18,7 +18,7 @@ function estimate(pin: string): Result {
   const from = new Date(Date.now() + days[0] * 86400000);
   const to = new Date(Date.now() + days[1] * 86400000);
   const fmt = (d: Date) => d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
-  return { ok: true, message: `Estimated delivery: ${fmt(from)} – ${fmt(to)}`, cod: prefix !== 79 };
+  return { ok: true, message: `Estimated delivery: ${fmt(from)} – ${fmt(to)}` };
 }
 
 export function PincodeChecker() {
@@ -67,7 +67,7 @@ export function PincodeChecker() {
               <p className="flex items-center gap-1.5">
                 <CheckCircle2 size={14} /> {result.message}
               </p>
-              <p className="pl-5 text-muted">{result.cod ? "Cash on Delivery available" : "Prepaid orders only for this PIN"}</p>
+              <p className="pl-5 text-muted">Shipping Charges Applicable · Prepaid orders (UPI / card)</p>
             </div>
           ) : (
             <p className="flex items-center gap-1.5 text-danger">

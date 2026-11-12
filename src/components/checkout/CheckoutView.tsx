@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Banknote, CreditCard, Info, Loader2, Lock, ShoppingBag, Smartphone } from "lucide-react";
+import { CreditCard, Info, Loader2, Lock, ShoppingBag, Smartphone } from "lucide-react";
 import { useRef, useState } from "react";
 import type { Address, CartItem, Order, PaymentMethod } from "@/types";
 import { useHydrated } from "@/hooks/use-hydrated";
@@ -42,8 +42,8 @@ const EMPTY: CheckoutForm = {
   pincode: "",
 };
 
-const PAYMENT_OPTIONS: { id: PaymentMethod; label: string; desc: string; icon: typeof Banknote }[] = [
-  { id: "cod", label: "Cash on Delivery", desc: "Pay in cash or UPI when your order arrives", icon: Banknote },
+// Prepaid only — Cash on Delivery is not offered.
+const PAYMENT_OPTIONS: { id: PaymentMethod; label: string; desc: string; icon: typeof CreditCard }[] = [
   { id: "upi", label: "UPI", desc: "Google Pay, PhonePe, Paytm or any UPI app", icon: Smartphone },
   { id: "card", label: "Credit / Debit Card", desc: "Visa, Mastercard, RuPay", icon: CreditCard },
 ];
@@ -62,12 +62,13 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
 
   const isBuyNow = mode === "buy-now" && !!buyNowItem;
   const lines: CartItem[] = isBuyNow && buyNowItem ? [buyNowItem] : cartItems;
+  // Shipping charges apply but aren't calculated yet — the total excludes shipping.
   const totals = calculateTotals(lines, couponCode);
 
   const [form, setForm] = useState<CheckoutForm>(EMPTY);
   const [prefilledFor, setPrefilledFor] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors<CheckoutForm>>({});
-  const [payment, setPayment] = useState<PaymentMethod>("cod");
+  const [payment, setPayment] = useState<PaymentMethod>("upi");
   const [upiId, setUpiId] = useState("");
   const [upiError, setUpiError] = useState("");
   const [placing, setPlacing] = useState(false);
@@ -116,7 +117,6 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
     }
 
     setPlacing(true);
-    const now = new Date().toISOString();
     const address: Address = {
       house: form.house.trim(),
       street: form.street.trim(),
@@ -125,6 +125,7 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
       state: form.state,
       pincode: form.pincode.trim(),
     };
+    const now = new Date().toISOString();
     const order: Order = {
       id: generateOrderId(),
       createdAt: now,
@@ -142,10 +143,11 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
       customer: { fullName: form.fullName.trim(), mobile: normalizeMobile(form.mobile), email: form.email.trim() },
       address,
       paymentMethod: payment,
-      couponCode: totals.couponDiscount > 0 || (couponCode && totals.shipping === 0) ? couponCode : null,
+      couponCode: totals.couponDiscount > 0 ? couponCode : null,
       subtotal: totals.subtotal,
       discount: totals.couponDiscount,
-      shipping: totals.shipping,
+      // Shipping charges are applicable but not calculated yet, so they are not part of the total.
+      shipping: null,
       total: totals.total,
       status: "Order Placed",
       history: { "Order Placed": now },
@@ -320,7 +322,7 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
                       </span>
                     </label>
                     <AnimatePresence initial={false}>
-                      {active && opt.id !== "cod" && (
+                      {active && (
                         <motion.div
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: "auto", opacity: 1 }}
@@ -415,7 +417,7 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
         {/* Mobile sticky place order */}
         <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-4 border-t border-line bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
           <div>
-            <p className="text-xs text-muted">Total</p>
+            <p className="text-xs text-muted">Total · Shipping charges applicable</p>
             <p className="text-lg font-semibold">{formatPrice(totals.total)}</p>
           </div>
           <button type="submit" disabled={placing} className="btn-accent min-h-12 flex-1">

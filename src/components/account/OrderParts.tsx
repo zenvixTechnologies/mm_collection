@@ -120,7 +120,7 @@ export function OrderTotals({ order }: { order: Order }) {
       )}
       <div className="flex justify-between">
         <dt className="text-muted">Shipping</dt>
-        <dd className={order.shipping === 0 ? "text-success" : undefined}>{order.shipping === 0 ? "FREE" : formatPrice(order.shipping)}</dd>
+        <dd>{order.shipping === null ? "Shipping Charges Applicable" : order.shipping === 0 ? "FREE" : formatPrice(order.shipping)}</dd>
       </div>
       <div className="flex justify-between border-t border-line pt-2.5 text-base font-semibold">
         <dt>Total</dt>

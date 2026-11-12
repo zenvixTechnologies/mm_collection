@@ -104,7 +104,7 @@ export function ProductPurchase({ product }: { product: Product }) {
 
       <ul className="mt-7 grid grid-cols-3 gap-2 text-center text-xs text-muted">
         <li className="flex flex-col items-center gap-1.5 rounded-xl bg-canvas px-2 py-3">
-          <Truck size={18} className="text-ink" /> Free delivery over {formatPrice(999)}
+          <Truck size={18} className="text-ink" /> Delivery across India
         </li>
         <li className="flex flex-col items-center gap-1.5 rounded-xl bg-canvas px-2 py-3">
           <RotateCcw size={18} className="text-ink" /> 7-day easy returns

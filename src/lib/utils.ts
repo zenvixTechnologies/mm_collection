@@ -61,5 +61,3 @@ export const SITE = {
   hours: "Mon – Sat, 10:00 AM – 8:00 PM",
 };
 
-export const FREE_SHIPPING_THRESHOLD = 999;
-export const SHIPPING_FEE = 79;

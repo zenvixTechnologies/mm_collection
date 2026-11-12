@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     template: `%s | ${SITE.name}`,
   },
   description:
-    "Shop women's dresses, kurtis, churidhars, sarees, co-ord sets, party wear and feeding wear — plus men's and kids' clothing — at M&M COLLECTIONS. Free delivery over ₹999 and easy returns.",
+    "Shop women's dresses, kurtis, churidhars, sarees, co-ord sets, party wear and feeding wear — plus men's and kids' clothing — at M&M COLLECTIONS. Delivered across India with easy returns.",
   applicationName: SITE.name,
   keywords: ["M&M COLLECTIONS", "ladies fashion", "kurtis", "dresses", "churidhar", "sarees", "feeding wear", "women clothing India", "men's clothing", "kids clothing"],
   openGraph: {

@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!category) return { title: "Category not found" };
   return {
     title: `${categoryFullName(category)} for ${getAudience(category.audience).label}`,
-    description: `${category.description} Shop ${categoryFullName(category).toLowerCase()} at M&M COLLECTIONS with free delivery over ₹999.`,
+    description: `${category.description} Shop ${categoryFullName(category).toLowerCase()} at M&M COLLECTIONS, delivered across India.`,
     alternates: { canonical: `/categories/${category.slug}` },
     openGraph: { images: [{ url: `${category.image}&w=1200&q=75`, alt: category.name }] },
   };

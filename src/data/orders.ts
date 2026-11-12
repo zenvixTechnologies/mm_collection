@@ -54,7 +54,8 @@ function order(
   discount = 0,
 ): Order {
   const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0);
-  const shipping = subtotal >= 999 ? 0 : 79;
+  // Shipping charges applicable — not calculated yet.
+  const shipping = null;
   return {
     id,
     createdAt,
@@ -66,7 +67,7 @@ function order(
     subtotal,
     discount,
     shipping,
-    total: subtotal - discount + shipping,
+    total: subtotal - discount,
     status,
     history: history(createdAt, status),
   };
@@ -75,9 +76,9 @@ function order(
 /** Sample order history shown for the demo account and searchable on the tracking page. */
 export const sampleOrders: Order[] = [
   order("MM24A7K1", "2026-11-08T10:24:00+05:30", [item(0, 1, "M"), item(8, 2, "M", 1)], "Shipped", "upi"),
-  order("MM24A3F9", "2026-11-02T18:05:00+05:30", [item(23, 1, "Free Size")], "Out for Delivery", "cod", "WELCOME10", 300),
+  order("MM24A3F9", "2026-11-02T18:05:00+05:30", [item(23, 1, "Free Size")], "Out for Delivery", "upi", "WELCOME10", 300),
   order("MM24931C", "2026-10-21T12:40:00+05:30", [item(2, 2, "L", 1)], "Delivered", "card", "FIRSTORDER", 100),
-  order("MM248Q2D", "2026-10-03T09:15:00+05:30", [item(7, 1, "M"), item(5, 1, "M", 1)], "Delivered", "cod"),
+  order("MM248Q2D", "2026-10-03T09:15:00+05:30", [item(7, 1, "M"), item(5, 1, "M", 1)], "Delivered", "card"),
   order("MM2471ZX", "2026-11-10T21:30:00+05:30", [item(6, 1, "S")], "Processing", "upi"),
-  order("MM246P0B", "2026-11-11T08:55:00+05:30", [item(27, 1, "M"), item(16, 1, "S")], "Confirmed", "cod"),
+  order("MM246P0B", "2026-11-11T08:55:00+05:30", [item(27, 1, "M"), item(16, 1, "S")], "Confirmed", "upi"),
 ];

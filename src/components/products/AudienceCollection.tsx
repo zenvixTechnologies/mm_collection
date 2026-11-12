@@ -27,7 +27,7 @@ export function audienceMetadata(audience: Audience): Metadata {
   const info = getAudience(audience);
   return {
     title: info.title,
-    description: `${info.tagline} Shop ${info.possessive.toLowerCase()} clothing at M&M COLLECTIONS with free delivery over ₹999.`,
+    description: `${info.tagline} Shop ${info.possessive.toLowerCase()} clothing at M&M COLLECTIONS, delivered across India.`,
     alternates: { canonical: info.href },
     openGraph: { images: [{ url: `${info.heroImage}&w=1200&q=75`, alt: info.title }] },
   };

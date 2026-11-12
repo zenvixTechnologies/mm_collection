@@ -15,7 +15,7 @@ const reasons = [
   {
     icon: Truck,
     title: "Convenient ordering",
-    text: "Cash on Delivery, UPI or card, with free delivery on orders above ₹999.",
+    text: "Pay securely by UPI or card, with delivery across India. Shipping charges applicable.",
   },
   {
     icon: Headphones,

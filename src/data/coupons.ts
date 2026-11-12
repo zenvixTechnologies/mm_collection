@@ -25,13 +25,6 @@ export const coupons: Coupon[] = [
     description: "15% off on orders above ₹1,999 (up to ₹750)",
   },
   {
-    code: "FREESHIP",
-    type: "freeship",
-    value: 0,
-    minOrder: 0,
-    description: "Free delivery on any order",
-  },
-  {
     code: "FESTIVE20",
     type: "percent",
     value: 20,

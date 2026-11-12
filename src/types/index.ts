@@ -106,6 +106,14 @@ export interface Product {
   addedAt: number;
   /** Units sold — used for "Best Selling" sort. */
   sold: number;
+  /** Packed shipping weight in grams (always > 0 for shippable products). */
+  weight: number;
+  /** Weight is stored in grams; kept explicit so future imports can't mix units. */
+  weightUnit: "g";
+  /** Packed parcel size in centimetres — used for volumetric weight when enabled. */
+  packageLength: number;
+  packageWidth: number;
+  packageHeight: number;
 }
 
 export interface CartItem {
@@ -124,7 +132,7 @@ export interface CartItem {
   audience?: Audience;
 }
 
-export type CouponType = "percent" | "flat" | "freeship";
+export type CouponType = "percent" | "flat";
 
 export interface Coupon {
   code: string;
@@ -140,7 +148,11 @@ export interface CartTotals {
   subtotal: number;
   mrpTotal: number;
   couponDiscount: number;
-  shipping: number;
+  /**
+   * Shipping charges are applicable but not calculated yet (rates will be configured in the
+   * admin dashboard), so this is always null for now and the total excludes shipping.
+   */
+  shipping: number | null;
   total: number;
   savings: number;
 }
@@ -160,6 +172,7 @@ export interface CustomerDetails {
   email: string;
 }
 
+/** "cod" is no longer offered at checkout; it stays in the type so older saved orders still display. */
 export type PaymentMethod = "cod" | "upi" | "card";
 
 export const ORDER_STATUSES = [
@@ -195,7 +208,8 @@ export interface Order {
   couponCode: string | null;
   subtotal: number;
   discount: number;
-  shipping: number;
+  /** null = shipping charges applicable, amount not calculated at checkout. */
+  shipping: number | null;
   total: number;
   status: OrderStatus;
   /** ISO timestamps per reached status, for the tracking timeline. */

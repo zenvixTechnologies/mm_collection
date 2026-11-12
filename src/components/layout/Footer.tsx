@@ -98,7 +98,6 @@ export function Footer() {
           <p>© {new Date().getFullYear()} {SITE.name}. All rights reserved.</p>
           <p className="flex items-center gap-2">
             We accept
-            <span className="rounded border border-white/15 px-1.5 py-0.5 font-semibold text-white/85">COD</span>
             <span className="rounded border border-white/15 px-1.5 py-0.5 font-semibold text-white/85">UPI</span>
             <span className="rounded border border-white/15 px-1.5 py-0.5 font-semibold text-white/85">Cards</span>
           </p>

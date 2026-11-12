@@ -10,7 +10,6 @@ import { formatPrice } from "@/lib/utils";
 import { useCartStore } from "@/store/cart-store";
 import { useUIStore } from "@/store/ui-store";
 import { CartLine } from "@/components/cart/CartLine";
-import { FreeShippingBar } from "@/components/cart/FreeShippingBar";
 import { Dialog } from "@/components/ui/Dialog";
 
 export function CartDrawer() {
@@ -37,7 +36,7 @@ export function CartDrawer() {
               <span className="text-muted">Subtotal</span>
               <span className="text-lg font-semibold">{formatPrice(totals.subtotal)}</span>
             </div>
-            <p className="text-xs text-muted">Shipping and coupon discounts are calculated at checkout.</p>
+            <p className="text-xs text-muted">Shipping Charges Applicable. Coupons can be applied in your bag.</p>
             <div className="grid grid-cols-2 gap-3">
               <Link href="/cart" className="btn-outline" onClick={close}>
                 View Bag
@@ -52,7 +51,6 @@ export function CartDrawer() {
     >
       {items.length ? (
         <div className="px-5 pt-4">
-          <FreeShippingBar subtotal={totals.subtotal} />
           <ul className="divide-y divide-line">
             <AnimatePresence initial={false}>
               {items.map((item) => (

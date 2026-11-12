@@ -1,8 +1,8 @@
-import { MessageCircle, RotateCcw, Truck, Wallet } from "lucide-react";
+import { MessageCircle, RotateCcw, ShieldCheck, Truck } from "lucide-react";
 
 const items = [
-  { icon: Truck, title: "Free delivery", text: "On orders above ₹999" },
-  { icon: Wallet, title: "Cash on Delivery", text: "Pay when it arrives" },
+  { icon: Truck, title: "Pan-India delivery", text: "Shipping charges applicable" },
+  { icon: ShieldCheck, title: "Secure payments", text: "UPI & cards" },
   { icon: RotateCcw, title: "7-day returns", text: "Easy size exchanges" },
   { icon: MessageCircle, title: "WhatsApp help", text: "Sizing & styling advice" },
 ];

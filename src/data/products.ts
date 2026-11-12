@@ -1,5 +1,6 @@
 import type { Audience, CategoryId, Product, ProductColor, Size } from "@/types";
 import { getCategory } from "./categories";
+import { SHIPPING_WEIGHTS, packageFor } from "./shipping-weights";
 import { discountPercent, slugify } from "@/lib/utils";
 import { IMG, detail, portrait, type ImageKey } from "./images";
 
@@ -115,6 +116,9 @@ function audienceOf(categoryId: CategoryId): Audience {
 }
 
 function build(seed: Seed, index: number): Product {
+  // Every product needs a real shipping weight — never default to 0.
+  const weight = SHIPPING_WEIGHTS[seed.name];
+  if (!(weight > 0)) throw new Error(`"${seed.name}" has no shipping weight in shipping-weights.ts`);
   // Guard the catalogue: a men's product must never be tagged into a women's or kids' category.
   const audience = audienceOf(seed.categoryId);
   for (const tag of seed.tags ?? []) {
@@ -152,6 +156,9 @@ function build(seed: Seed, index: number): Product {
     // Later entries in the list are treated as more recently added.
     addedAt: index,
     sold: seed.sold,
+    weight,
+    weightUnit: "g",
+    ...packageFor(weight),
   };
 }
 
