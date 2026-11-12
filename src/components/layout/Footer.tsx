@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Mail, MapPin, Phone } from "lucide-react";
-import { categories } from "@/data/categories";
+import { AUDIENCES } from "@/data/audiences";
+import { getCategoriesByAudience } from "@/data/categories";
 import { SITE } from "@/lib/utils";
 import { FacebookIcon, InstagramIcon, WhatsappIcon, YoutubeIcon } from "@/components/ui/SocialIcons";
 import { Logo } from "./Logo";
@@ -37,7 +38,7 @@ export function Footer() {
           <Logo size="footer" onDark />
           <p className="mt-4 max-w-xs text-sm leading-6 text-white/65">
             {SITE.name} brings you thoughtfully chosen ladies&apos; fashion — everyday kurtis, dresses, festive wear and
-            feeding wear — online and at our store in Alappuzha.
+            feeding wear — plus clothing for men and kids, online and at our store in Alappuzha.
           </p>
           <ul className="mt-5 flex gap-2" aria-label="Social media">
             {socials.map((s) => (
@@ -59,7 +60,12 @@ export function Footer() {
         <FooterColumn title="Quick Links" links={quickLinks} />
         <FooterColumn
           title="Shop"
-          links={categories.slice(0, 7).map((c) => ({ href: `/categories/${c.slug}`, label: c.name }))}
+          links={[
+            ...AUDIENCES.map((a) => ({ href: a.href, label: `Shop ${a.label}` })),
+            ...getCategoriesByAudience("women")
+              .slice(0, 4)
+              .map((c) => ({ href: `/categories/${c.slug}`, label: c.name })),
+          ]}
         />
         <FooterColumn title="Policies" links={policies} />
 
@@ -92,7 +98,6 @@ export function Footer() {
           <p>© {new Date().getFullYear()} {SITE.name}. All rights reserved.</p>
           <p className="flex items-center gap-2">
             We accept
-            <span className="rounded border border-white/15 px-1.5 py-0.5 font-semibold text-white/85">COD</span>
             <span className="rounded border border-white/15 px-1.5 py-0.5 font-semibold text-white/85">UPI</span>
             <span className="rounded border border-white/15 px-1.5 py-0.5 font-semibold text-white/85">Cards</span>
           </p>

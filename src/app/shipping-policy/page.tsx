@@ -10,13 +10,9 @@ export const metadata: Metadata = {
 
 export default function ShippingPolicyPage() {
   return (
-    <PolicyPage title="Shipping Policy" updated="1 November 2026" current="/shipping-policy">
+    <PolicyPage title="Shipping Policy" updated="12 November 2026" current="/shipping-policy">
       <h2>Delivery charges</h2>
-      <ul>
-        <li>Free standard delivery on all orders of ₹999 and above (after discounts).</li>
-        <li>A flat delivery fee of ₹79 applies to orders below ₹999.</li>
-        <li>The FREESHIP coupon waives the delivery fee on any order.</li>
-      </ul>
+      <p>Shipping charges are applicable on orders. For details about the shipping charge for your order, please contact us.</p>
       <h2>Processing time</h2>
       <p>Orders are packed and dispatched from our Alappuzha store within 24–48 hours (excluding Sundays and public holidays).</p>
       <h2>Delivery timelines</h2>
@@ -26,8 +22,8 @@ export default function ShippingPolicyPage() {
         <li>Rest of India: 4–7 working days.</li>
       </ul>
       <p>Timelines are estimates; remote areas or courier delays may add a few days. You can check an estimate using the PIN code checker on any product page.</p>
-      <h2>Cash on Delivery</h2>
-      <p>COD is available on most serviceable PIN codes. Please keep the exact amount ready; delivery partners may also accept UPI.</p>
+      <h2>Payment</h2>
+      <p>All orders are prepaid by UPI or credit / debit card. We do not offer Cash on Delivery.</p>
       <h2>Order tracking</h2>
       <p>
         Once your order ships you&apos;ll receive an SMS and email with tracking details. You can also check status any time on the{" "}

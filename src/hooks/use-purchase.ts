@@ -102,6 +102,7 @@ export function usePurchase(product: Product) {
       color,
       quantity: qty,
       stock: product.stock,
+      audience: product.audienceCategory,
     });
     router.push("/checkout?mode=buy-now");
     return true;

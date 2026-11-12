@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import type { Product, Size } from "@/types";
-import { categories } from "@/data/categories";
+import { categories, categoryFullName } from "@/data/categories";
 import { ALL_SIZES, productInCategory } from "@/data/products";
 import { DISCOUNT_OPTIONS, type Filters } from "@/lib/catalog";
 import { cn, formatPrice } from "@/lib/utils";
@@ -35,6 +35,8 @@ export function FilterPanel({ filters, onChange, source, hideCategory }: FilterP
   const sizes = ALL_SIZES.filter((s) => source.some((p) => p.sizes.includes(s)));
   const colors = Array.from(new Map(source.flatMap((p) => p.colors).map((c) => [c.name, c])).values());
   const cats = categories.filter((c) => source.some((p) => productInCategory(p, c.id)));
+  // Mixed listings (Shop All) need "Men's Ethnic Wear" vs "Ethnic Wear" to tell sub-categories apart.
+  const mixed = new Set(source.map((p) => p.audienceCategory)).size > 1;
   const [minIn, setMinIn] = useState(filters.minPrice?.toString() ?? "");
   const [maxIn, setMaxIn] = useState(filters.maxPrice?.toString() ?? "");
   // Keep the custom inputs in sync when the price filter changes elsewhere (chips, "Clear all").
@@ -61,7 +63,7 @@ export function FilterPanel({ filters, onChange, source, hideCategory }: FilterP
                 <Checkbox
                   checked={filters.categories.includes(c.id)}
                   onChange={() => set({ categories: toggle(filters.categories, c.id) })}
-                  label={c.name}
+                  label={mixed ? categoryFullName(c) : c.name}
                   count={source.filter((p) => productInCategory(p, c.id)).length}
                 />
               </li>

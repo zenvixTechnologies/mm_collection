@@ -21,17 +21,17 @@ export function OrderSummary({ totals, couponCode, children, title = "Order summ
         {totals.couponDiscount > 0 && (
           <Row label={`Coupon${couponCode ? ` (${couponCode})` : ""}`} value={`− ${formatPrice(totals.couponDiscount)}`} tone="success" />
         )}
-        <Row
-          label="Shipping"
-          value={totals.shipping === 0 ? "FREE" : formatPrice(totals.shipping)}
-          tone={totals.shipping === 0 ? "success" : undefined}
-        />
+        {/* Placeholder until shipping rates are configured — no amount is shown or added. */}
+        <div className="flex items-center justify-between gap-4">
+          <dt className="text-muted">Shipping</dt>
+          <dd className="text-right text-[13.5px] font-medium">Shipping Charges Applicable</dd>
+        </div>
         <div className="border-t border-line pt-3">
           <div className="flex items-baseline justify-between">
             <dt className="font-semibold">Total</dt>
             <dd className="text-xl font-semibold">{formatPrice(totals.total)}</dd>
           </div>
-          <p className="mt-1 text-right text-xs text-muted">Inclusive of all taxes</p>
+          <p className="mt-1 text-right text-xs text-muted">Inclusive of all taxes · Shipping charges applicable</p>
         </div>
       </dl>
       {totals.savings > 0 && (

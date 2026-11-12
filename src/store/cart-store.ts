@@ -61,6 +61,7 @@ export const useCartStore = create<CartState>()(
                 color,
                 quantity: qty,
                 stock: product.stock,
+                audience: product.audienceCategory,
               },
             ],
           });

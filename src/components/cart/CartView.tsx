@@ -12,7 +12,6 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { LineSkeleton } from "@/components/ui/Skeletons";
 import { CartLine } from "./CartLine";
 import { CouponForm } from "./CouponForm";
-import { FreeShippingBar } from "./FreeShippingBar";
 import { OrderSummary } from "./OrderSummary";
 
 export function CartView() {
@@ -53,8 +52,7 @@ export function CartView() {
       ) : (
         <div className="mt-8 grid gap-10 pb-24 lg:grid-cols-[1fr_380px] lg:pb-0">
           <section aria-label="Items in your bag">
-            <FreeShippingBar subtotal={totals.subtotal} />
-            <ul className="mt-2 divide-y divide-line border-b border-line">
+            <ul className="divide-y divide-line border-b border-line">
               <AnimatePresence initial={false}>
                 {items.map((item) => (
                   <CartLine key={item.key} item={item} />
@@ -83,7 +81,7 @@ export function CartView() {
           {/* Mobile sticky checkout */}
           <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-4 border-t border-line bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
             <div>
-              <p className="text-xs text-muted">Total</p>
+              <p className="text-xs text-muted">Total · Shipping charges applicable</p>
               <p className="text-lg font-semibold">{formatPrice(totals.total)}</p>
             </div>
             <Link href="/checkout" className="btn-accent min-h-12 flex-1">

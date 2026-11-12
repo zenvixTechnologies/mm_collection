@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Check, RotateCcw, ShieldCheck, ShoppingBag, Truck, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Product } from "@/types";
+import { getAudience } from "@/data/audiences";
 import { getCategory } from "@/data/categories";
 import { usePurchase } from "@/hooks/use-purchase";
 import { formatPrice } from "@/lib/utils";
@@ -23,6 +24,7 @@ export function ProductPurchase({ product }: { product: Product }) {
   const [guideOpen, setGuideOpen] = useState(false);
   const addRecent = useRecentStore((s) => s.add);
   const category = getCategory(product.categoryId);
+  const audience = getAudience(product.audienceCategory);
 
   useEffect(() => addRecent(product.id), [addRecent, product.id]);
 
@@ -34,11 +36,21 @@ export function ProductPurchase({ product }: { product: Product }) {
 
   return (
     <div>
-      {category && (
-        <Link href={`/categories/${category.slug}`} className="eyebrow hover:underline">
-          {category.name}
+      <p className="eyebrow">
+        <Link href={audience.href} className="hover:underline">
+          {audience.label}
         </Link>
-      )}
+        {category && (
+          <>
+            <span aria-hidden className="mx-1.5 text-subtle">
+              /
+            </span>
+            <Link href={`/categories/${category.slug}`} className="hover:underline">
+              {category.name}
+            </Link>
+          </>
+        )}
+      </p>
       <div className="mt-2 flex items-start justify-between gap-3">
         <h1 className="font-display text-[32px] leading-tight font-semibold sm:text-[40px]">{product.name}</h1>
         <WishlistButton productId={product.id} productName={product.name} variant="outline" className="mt-1 h-11 w-11 sm:hidden" />
@@ -92,7 +104,7 @@ export function ProductPurchase({ product }: { product: Product }) {
 
       <ul className="mt-7 grid grid-cols-3 gap-2 text-center text-xs text-muted">
         <li className="flex flex-col items-center gap-1.5 rounded-xl bg-canvas px-2 py-3">
-          <Truck size={18} className="text-ink" /> Free delivery over {formatPrice(999)}
+          <Truck size={18} className="text-ink" /> Delivery across India
         </li>
         <li className="flex flex-col items-center gap-1.5 rounded-xl bg-canvas px-2 py-3">
           <RotateCcw size={18} className="text-ink" /> 7-day easy returns
@@ -127,7 +139,7 @@ export function ProductPurchase({ product }: { product: Product }) {
         </div>
       </div>
 
-      <SizeGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
+      <SizeGuide open={guideOpen} onClose={() => setGuideOpen(false)} product={product} />
     </div>
   );
 }

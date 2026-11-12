@@ -5,14 +5,17 @@ import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, Heart, Package, Phone, Truck, User } from "lucide-react";
 import { useEffect, useState } from "react";
-import { categories } from "@/data/categories";
+import { getAudience } from "@/data/audiences";
+import { getCategoriesByAudience } from "@/data/categories";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { cn, SITE } from "@/lib/utils";
+import { useActiveAudience } from "@/store/audience-store";
 import { useCurrentUser } from "@/store/auth-store";
 import { useUIStore } from "@/store/ui-store";
 import { useWishlistStore } from "@/store/wishlist-store";
 import { Dialog } from "@/components/ui/Dialog";
-import { NAV_LINKS, isActivePath } from "./navigation";
+import { AudienceSwitcher } from "./AudienceSwitcher";
+import { NAV_LINKS, isActivePath, navHref } from "./navigation";
 
 export function MobileMenu() {
   const open = useUIStore((s) => s.menuOpen);
@@ -22,12 +25,18 @@ export function MobileMenu() {
   const user = useCurrentUser();
   const wishCount = useWishlistStore((s) => s.ids.length);
   const [catsOpen, setCatsOpen] = useState(false);
+  const audience = useActiveAudience();
+  const audienceInfo = getAudience(audience);
 
   useEffect(() => setOpen(false), [pathname, setOpen]);
 
   return (
     <Dialog open={open} onClose={() => setOpen(false)} title="Menu" variant="left">
       <nav aria-label="Mobile" className="flex h-full flex-col">
+        <div className="px-5 pt-3 pb-1">
+          <p className="mb-2 text-xs font-semibold tracking-[0.16em] text-muted uppercase">Shopping for</p>
+          <AudienceSwitcher variant="menu" />
+        </div>
         <ul className="px-3 py-2">
           {NAV_LINKS.map((link) => {
             const active = isActivePath(pathname, link.href);
@@ -56,11 +65,11 @@ export function MobileMenu() {
                         className="overflow-hidden pl-3"
                       >
                         <li>
-                          <Link href="/categories" className="block rounded-lg px-3 py-2.5 text-[15px] font-semibold text-accent">
-                            All categories
+                          <Link href={audienceInfo.href} className="block rounded-lg px-3 py-2.5 text-[15px] font-semibold text-accent">
+                            All {audienceInfo.possessive} categories
                           </Link>
                         </li>
-                        {categories.map((c) => (
+                        {getCategoriesByAudience(audience).map((c) => (
                           <li key={c.id}>
                             <Link
                               href={`/categories/${c.slug}`}
@@ -82,7 +91,7 @@ export function MobileMenu() {
             return (
               <li key={link.href}>
                 <Link
-                  href={link.href}
+                  href={navHref(link, audience)}
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "block rounded-xl px-3 py-3.5 text-[16px] font-medium",

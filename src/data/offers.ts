@@ -3,8 +3,8 @@ import type { Offer } from "@/types";
 export const offers: Offer[] = [
   {
     id: "o1",
-    title: "Free shipping on orders above ₹999",
-    subtitle: "Delivered across India in 3–7 days",
+    title: "Delivered across India in 3–7 days",
+    subtitle: "Shipping charges applicable · Pay securely by UPI or card",
     href: "/shipping-policy",
   },
   {

@@ -7,7 +7,9 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { POPULAR_SEARCHES, searchProducts } from "@/lib/catalog";
 import { formatPrice } from "@/lib/utils";
 import { useUIStore } from "@/store/ui-store";
-import { categories } from "@/data/categories";
+import { getAudience } from "@/data/audiences";
+import { getCategoriesByAudience } from "@/data/categories";
+import { useActiveAudience } from "@/store/audience-store";
 import { Dialog } from "@/components/ui/Dialog";
 import { ProductImage } from "@/components/ui/ProductImage";
 
@@ -17,6 +19,7 @@ export function SearchOverlay() {
   const router = useRouter();
   const pathname = usePathname();
   const [query, setQuery] = useState("");
+  const audience = useActiveAudience();
   const deferred = useDeferredValue(query);
   const results = useMemo(() => searchProducts(deferred).slice(0, 6), [deferred]);
 
@@ -52,7 +55,7 @@ export function SearchOverlay() {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search for dresses, kurtis, sarees…"
+            placeholder="Search dresses, shirts, kids' frocks…"
             autoComplete="off"
             className="h-14 w-full rounded-full border border-line bg-canvas pr-28 pl-12 text-[16px] focus:border-ink focus:bg-white focus:outline-none"
           />
@@ -68,7 +71,7 @@ export function SearchOverlay() {
                 <TrendingUp size={14} /> Popular searches
               </p>
               <div className="flex flex-wrap gap-2">
-                {POPULAR_SEARCHES.map((s) => (
+                {POPULAR_SEARCHES[audience].map((s) => (
                   <button
                     key={s}
                     type="button"
@@ -81,9 +84,13 @@ export function SearchOverlay() {
               </div>
             </div>
             <div>
-              <p className="mb-3 text-xs font-semibold tracking-wider text-muted uppercase">Browse categories</p>
+              <p className="mb-3 text-xs font-semibold tracking-wider text-muted uppercase">
+                Browse {getAudience(audience).possessive} categories
+              </p>
               <div className="flex flex-wrap gap-2">
-                {categories.slice(0, 8).map((c) => (
+                {getCategoriesByAudience(audience)
+                  .slice(0, 8)
+                  .map((c) => (
                   <Link
                     key={c.id}
                     href={`/categories/${c.slug}`}
@@ -107,7 +114,12 @@ export function SearchOverlay() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[15px] font-medium">{p.name}</p>
-                      <p className="text-sm text-muted">{formatPrice(p.price)}</p>
+                      <p className="text-sm text-muted">
+                        {formatPrice(p.price)}
+                        <span className="ml-2 rounded-full bg-sand px-2 py-0.5 text-[11px] font-semibold text-ink">
+                          {getAudience(p.audienceCategory).label}
+                        </span>
+                      </p>
                     </div>
                     <ArrowRight size={16} className="text-subtle" />
                   </Link>

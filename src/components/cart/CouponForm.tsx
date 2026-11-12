@@ -62,14 +62,10 @@ export function CouponForm({ subtotal }: { subtotal: number }) {
           </button>
         </div>
       ) : (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            apply(code);
-          }}
-          noValidate
-        >
-          <label htmlFor="coupon" className="mb-2 flex items-center gap-2 text-sm font-semibold">
+        // Not a <form>: this sits inside the checkout form, and nested forms are invalid HTML
+        // (hydration error, and Enter could submit the order). Enter is handled on the input instead.
+        <div role="group" aria-labelledby="coupon-label">
+          <label id="coupon-label" htmlFor="coupon" className="mb-2 flex items-center gap-2 text-sm font-semibold">
             <Tag size={15} className="text-accent" /> Apply coupon
           </label>
           <div className="flex gap-2">
@@ -80,13 +76,19 @@ export function CouponForm({ subtotal }: { subtotal: number }) {
                 setCode(e.target.value.toUpperCase());
                 if (error) setError("");
               }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  apply(code);
+                }
+              }}
               placeholder="Enter code"
               autoComplete="off"
               aria-invalid={error ? true : undefined}
               aria-describedby={error ? "coupon-error" : undefined}
               className="field-input h-11 uppercase placeholder:normal-case"
             />
-            <button type="submit" className="btn-primary min-h-11 px-5">
+            <button type="button" onClick={() => apply(code)} className="btn-primary min-h-11 px-5">
               Apply
             </button>
           </div>
@@ -95,7 +97,7 @@ export function CouponForm({ subtotal }: { subtotal: number }) {
               {error}
             </p>
           )}
-        </form>
+        </div>
       )}
 
       <button

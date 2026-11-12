@@ -5,15 +5,18 @@ import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, Heart, Menu, Search, ShoppingBag, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { categories } from "@/data/categories";
+import { getAudience } from "@/data/audiences";
+import { getCategoriesByAudience } from "@/data/categories";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { cn } from "@/lib/utils";
+import { useActiveAudience } from "@/store/audience-store";
 import { useCartStore } from "@/store/cart-store";
 import { useUIStore } from "@/store/ui-store";
 import { useWishlistStore } from "@/store/wishlist-store";
 import { ProductImage } from "@/components/ui/ProductImage";
 import { Logo } from "./Logo";
-import { NAV_LINKS, isActivePath } from "./navigation";
+import { AudienceSwitcher } from "./AudienceSwitcher";
+import { NAV_LINKS, isActivePath, navHref } from "./navigation";
 
 function CountBadge({ count, label }: { count: number; label: string }) {
   return (
@@ -44,6 +47,9 @@ export function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setCatMenuOpen] = useState(false);
   const closeTimer = useRef<number | undefined>(undefined);
+  const audience = useActiveAudience();
+  const audienceInfo = getAudience(audience);
+  const menuCategories = getCategoriesByAudience(audience);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -79,9 +85,11 @@ export function Header() {
         <Logo withWordmark priority className="absolute left-1/2 -translate-x-1/2 lg:static lg:translate-x-0" />
 
         {/* Desktop nav */}
-        <nav aria-label="Main" className="mx-auto hidden lg:block">
+        <nav aria-label="Main" className="mx-auto hidden items-center gap-3 lg:flex xl:gap-5">
+          <AudienceSwitcher variant="header" />
+          <span className="h-6 w-px bg-line" aria-hidden />
           <ul className="flex items-center gap-1">
-            {NAV_LINKS.map((link) => {
+            {NAV_LINKS.filter((link) => link.desktop).map((link) => {
               const active = isActivePath(pathname, link.href);
               const base = cn(
                 "relative flex h-10 items-center gap-1 rounded-full px-4 text-[14.5px] font-medium transition-colors",
@@ -121,8 +129,11 @@ export function Header() {
                           onKeyDown={(e) => e.key === "Escape" && setCatMenuOpen(false)}
                         >
                           <div className="grid grid-cols-[1fr_200px] gap-6 rounded-2xl border border-line bg-white p-6 shadow-[var(--shadow-pop)]">
-                            <ul className="grid grid-cols-3 gap-x-4 gap-y-1">
-                              {categories.map((c) => (
+                            <ul className="grid grid-cols-3 content-start gap-x-4 gap-y-1">
+                              <li className="col-span-3 mb-1 px-3 text-xs font-semibold tracking-[0.16em] text-muted uppercase">
+                                {audienceInfo.possessive} categories
+                              </li>
+                              {menuCategories.map((c) => (
                                 <li key={c.id}>
                                   <Link
                                     href={`/categories/${c.slug}`}
@@ -133,16 +144,19 @@ export function Header() {
                                 </li>
                               ))}
                               <li className="col-span-3 mt-2 border-t border-line pt-3">
-                                <Link href="/shop" className="px-3 text-sm font-semibold text-accent hover:underline">
-                                  Shop all products →
+                                <Link href={audienceInfo.href} className="px-3 text-sm font-semibold text-accent hover:underline">
+                                  Shop the {audienceInfo.possessive} collection →
+                                </Link>
+                                <Link href="/shop" className="px-3 text-sm text-muted hover:text-ink hover:underline">
+                                  Shop all products
                                 </Link>
                               </li>
                             </ul>
-                            <Link href="/new-arrivals" className="group relative overflow-hidden rounded-xl">
+                            <Link href={`/new-arrivals?for=${audience}`} className="group relative overflow-hidden rounded-xl">
                               <div className="relative aspect-[4/5]">
                                 <ProductImage
-                                  src={categories[0].image}
-                                  alt="New arrivals at M&M COLLECTIONS"
+                                  src={menuCategories[0].image}
+                                  alt={`${audienceInfo.possessive} new arrivals at M&M COLLECTIONS`}
                                   fill
                                   sizes="200px"
                                   className="transition-transform duration-500 group-hover:scale-105"
@@ -160,7 +174,7 @@ export function Header() {
               }
               return (
                 <li key={link.href}>
-                  <Link href={link.href} className={base} aria-current={active ? "page" : undefined}>
+                  <Link href={navHref(link, audience)} className={base} aria-current={active ? "page" : undefined}>
                     {link.label}
                     {underline}
                   </Link>

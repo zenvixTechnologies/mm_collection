@@ -1,6 +1,6 @@
 import type { CartTotals, Coupon } from "@/types";
 import { findCoupon } from "@/data/coupons";
-import { FREE_SHIPPING_THRESHOLD, SHIPPING_FEE, formatPrice } from "./utils";
+import { formatPrice } from "./utils";
 
 interface PriceLine {
   price: number;
@@ -36,6 +36,10 @@ export function couponDiscount(coupon: Coupon | undefined, subtotal: number) {
   return 0;
 }
 
+/**
+ * Cart totals. Shipping charges are applicable but not calculated yet — rates will be set up
+ * in the admin dashboard — so `shipping` is null and the total covers products and coupons only.
+ */
 export function calculateTotals(lines: PriceLine[], couponCode: string | null): CartTotals {
   const itemCount = lines.reduce((n, l) => n + l.quantity, 0);
   const subtotal = lines.reduce((sum, l) => sum + l.price * l.quantity, 0);
@@ -45,18 +49,13 @@ export function calculateTotals(lines: PriceLine[], couponCode: string | null): 
   const validCoupon = coupon && subtotal >= coupon.minOrder ? coupon : undefined;
   const discount = couponDiscount(validCoupon, subtotal);
 
-  const freeShipping =
-    itemCount === 0 || subtotal >= FREE_SHIPPING_THRESHOLD || validCoupon?.type === "freeship";
-  const shipping = freeShipping ? 0 : SHIPPING_FEE;
-
-  const total = Math.max(0, subtotal - discount + shipping);
   return {
     itemCount,
     subtotal,
     mrpTotal,
     couponDiscount: discount,
-    shipping,
-    total,
+    shipping: null,
+    total: Math.max(0, subtotal - discount),
     savings: mrpTotal - subtotal + discount,
   };
 }

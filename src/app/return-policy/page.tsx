@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function ReturnPolicyPage() {
   return (
-    <PolicyPage title="Return & Refund Policy" updated="1 November 2026" current="/return-policy">
+    <PolicyPage title="Return & Refund Policy" updated="12 November 2026" current="/return-policy">
       <p className="mt-6">We want you to love what you buy. If something isn&apos;t right, here&apos;s how we can help.</p>
       <h2>Return window</h2>
       <p>You can request a return or size exchange within 7 days of delivery.</p>
@@ -33,11 +33,29 @@ export default function ReturnPolicyPage() {
       <h2>Refunds</h2>
       <ul>
         <li>Prepaid orders (UPI / card): refunded to the original payment method within 5–7 working days of the quality check.</li>
-        <li>Cash on Delivery orders: refunded to your bank account or UPI ID within 5–7 working days.</li>
-        <li>The delivery fee (if any) is non-refundable unless the item was damaged or incorrect.</li>
+        <li>The shipping charge is non-refundable unless the item was damaged or incorrect.</li>
       </ul>
       <h2>Damaged or incorrect items</h2>
-      <p>If you receive a damaged or wrong item, contact us within 48 hours of delivery with photos and we&apos;ll replace it or refund you in full.</p>
+      <p>
+        If you receive a damaged or wrong item, contact us within 48 hours of delivery with photos (or an unboxing video — see below) and
+        we&apos;ll replace it or refund you in full.
+      </p>
+      <h2>Unboxing video</h2>
+      <p>
+        We recommend recording a continuous unboxing video while opening your package. This helps us verify claims involving damaged,
+        incorrect, or missing products.
+      </p>
+      <ul>
+        <li>
+          For damaged, incorrect, or missing items, we may ask you for an unboxing video or clear photographs to help us investigate the
+          issue.
+        </li>
+        <li>
+          If an unboxing video is unavailable, our team will review the complaint using the available evidence, order details, and
+          shipping records.
+        </li>
+        <li>The absence of an unboxing video alone will not automatically disqualify an otherwise valid return or refund claim.</li>
+      </ul>
     </PolicyPage>
   );
 }

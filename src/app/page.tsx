@@ -1,4 +1,5 @@
-import { getBestSellers, getNewArrivals } from "@/data/products";
+import { getBestSellers, getNewArrivals, getProductsByCategory } from "@/data/products";
+import { AudienceSelector } from "@/components/home/AudienceSelector";
 import { CategoryGrid } from "@/components/home/CategoryGrid";
 import { FeaturedCollections } from "@/components/home/FeaturedCollections";
 import { Hero } from "@/components/home/Hero";
@@ -11,18 +12,42 @@ import { ProductGrid } from "@/components/products/ProductGrid";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import Link from "next/link";
 
+/**
+ * The homepage is the Women's experience — the brand's primary focus.
+ * Men and Kids get one entry point ("Who are you shopping for?") rather than equal billing.
+ */
 export default function HomePage() {
-  const newArrivals = getNewArrivals(8);
-  const bestSellers = getBestSellers(8);
+  const newArrivals = getNewArrivals(8, "women");
+  const bestSellers = getBestSellers(8, "women");
+  const trendingDresses = [...getProductsByCategory("dresses")]
+    .filter((p) => p.stock > 0)
+    .sort((a, b) => b.sold - a.sold)
+    .slice(0, 4);
 
   return (
     <>
       <Hero />
       <TrustBar />
 
-      <section aria-labelledby="cat-heading" className="container-page mt-14 sm:mt-20">
-        <SectionHeading id="cat-heading" eyebrow="Explore" title="Shop by Category" href="/categories" linkLabel="All categories" />
-        <CategoryGrid />
+      <section aria-labelledby="audience-heading" className="container-page mt-14 sm:mt-20">
+        <SectionHeading
+          id="audience-heading"
+          eyebrow="Women · Men · Kids"
+          title="Who are you shopping for?"
+          description="Explore collections made for everyone."
+        />
+        <AudienceSelector />
+      </section>
+
+      <section aria-labelledby="cat-heading" className="container-page mt-16 sm:mt-24">
+        <SectionHeading
+          id="cat-heading"
+          eyebrow="Explore women's fashion"
+          title="Shop by Category"
+          href="/categories"
+          linkLabel="All categories"
+        />
+        <CategoryGrid audience="women" />
       </section>
 
       <section aria-labelledby="new-heading" className="container-page mt-16 sm:mt-24">
@@ -31,10 +56,10 @@ export default function HomePage() {
           eyebrow="Just landed"
           title="New Arrivals"
           description="Fresh styles for the season, added this month."
-          href="/new-arrivals"
+          href="/new-arrivals?for=women"
         />
         <ProductGrid products={newArrivals} />
-        <MobileViewAll href="/new-arrivals" label="View all new arrivals" />
+        <MobileViewAll href="/new-arrivals?for=women" label="View all new arrivals" />
       </section>
 
       <section aria-labelledby="collections-heading" className="container-page mt-16 sm:mt-24">
@@ -50,11 +75,23 @@ export default function HomePage() {
             eyebrow="Customer favourites"
             title="Best Sellers"
             description="Loved, reviewed and reordered by thousands of women."
-            href="/best-sellers"
+            href="/best-sellers?for=women"
           />
           <ProductGrid products={bestSellers} showRating />
-          <MobileViewAll href="/best-sellers" label="View all best sellers" />
+          <MobileViewAll href="/best-sellers?for=women" label="View all best sellers" />
         </div>
+      </section>
+
+      <section aria-labelledby="dresses-heading" className="container-page mt-16 sm:mt-24">
+        <SectionHeading
+          id="dresses-heading"
+          eyebrow="Trending now"
+          title="Trending Dresses"
+          description="The dresses everyone is reaching for this season."
+          href="/categories/dresses"
+        />
+        <ProductGrid products={trendingDresses} showRating />
+        <MobileViewAll href="/categories/dresses" label="Shop all dresses" />
       </section>
 
       <section aria-label="Seasonal offer" className="container-page mt-16 sm:mt-24">
