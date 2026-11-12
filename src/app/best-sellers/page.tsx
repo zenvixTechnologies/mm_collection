@@ -1,17 +1,18 @@
 import type { Metadata } from "next";
+import { isAudience } from "@/data/audiences";
 import { getBestSellers } from "@/data/products";
 import { ShopView } from "@/components/products/ShopView";
 
 export const metadata: Metadata = {
   title: "Best Sellers",
-  description: "Our customers' favourite dresses, kurtis, feeding frocks and more — loved and reordered again and again.",
+  description: "Our customers' favourite women's, men's and kids' pieces — loved and reordered again and again.",
   alternates: { canonical: "/best-sellers" },
 };
 
-type Props = { searchParams: Promise<{ sort?: string; category?: string }> };
+type Props = { searchParams: Promise<{ sort?: string; category?: string; for?: string }> };
 
 export default async function BestSellersPage({ searchParams }: Props) {
-  const { sort, category } = await searchParams;
+  const { sort, category, for: audience } = await searchParams;
   return (
     <ShopView
       title="Best Sellers"
@@ -20,7 +21,7 @@ export default async function BestSellersPage({ searchParams }: Props) {
       products={getBestSellers()}
       initialSort={sort ?? "best-selling"}
       initialCategory={category}
-      showCategoryNav={false}
+      initialAudience={isAudience(audience) ? audience : undefined}
     />
   );
 }

@@ -1,4 +1,7 @@
-export type CategoryId =
+/** Top-level shopping audience. Women is the brand's primary focus and the default. */
+export type Audience = "women" | "men" | "kids";
+
+export type WomenCategoryId =
   | "dresses"
   | "tops"
   | "kurtis"
@@ -12,9 +15,33 @@ export type CategoryId =
   | "nightwear"
   | "feeding-wear";
 
+export type MenCategoryId =
+  | "men-shirts"
+  | "men-t-shirts"
+  | "men-jeans"
+  | "men-trousers"
+  | "men-casual-wear"
+  | "men-formal-wear"
+  | "men-ethnic-wear"
+  | "men-co-ord-sets";
+
+export type KidsCategoryId =
+  | "kids-boys"
+  | "kids-girls"
+  | "kids-dresses"
+  | "kids-t-shirts"
+  | "kids-sets"
+  | "kids-baby"
+  | "kids-ethnic-wear"
+  | "kids-casual-wear";
+
+/** A sub-category within one audience (e.g. Men → Shirts). */
+export type CategoryId = WomenCategoryId | MenCategoryId | KidsCategoryId;
+
 export interface Category {
   id: CategoryId;
   slug: CategoryId;
+  audience: Audience;
   name: string;
   description: string;
   image: string;
@@ -25,13 +52,37 @@ export interface ProductColor {
   hex: string;
 }
 
-export type Size = "XS" | "S" | "M" | "L" | "XL" | "XXL" | "Free Size";
+export type Size =
+  | "XS"
+  | "S"
+  | "M"
+  | "L"
+  | "XL"
+  | "XXL"
+  | "Free Size"
+  // Men's jeans / trousers — waist in inches
+  | "28"
+  | "30"
+  | "32"
+  | "34"
+  | "36"
+  // Kids' age sizes
+  | "0-6M"
+  | "6-12M"
+  | "1-2Y"
+  | "3-4Y"
+  | "5-6Y"
+  | "7-8Y"
+  | "9-10Y";
 
 export interface Product {
   id: string;
   slug: string;
   sku: string;
   name: string;
+  /** Primary filter: who the product is for. Always matches the audience of `categoryId`. */
+  audienceCategory: Audience;
+  /** The product's sub-category within its audience (e.g. "men-shirts"). */
   categoryId: CategoryId;
   /** Additional categories this product also appears in (e.g. a kurti is also Ethnic Wear). */
   tags: CategoryId[];
@@ -69,6 +120,8 @@ export interface CartItem {
   color: string | null;
   quantity: number;
   stock: number;
+  /** Optional so bags saved before audiences existed still load. */
+  audience?: Audience;
 }
 
 export type CouponType = "percent" | "flat" | "freeship";
@@ -122,6 +175,7 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
 export interface OrderItem {
   productId: string;
+  audience?: Audience;
   slug: string;
   name: string;
   image: string;

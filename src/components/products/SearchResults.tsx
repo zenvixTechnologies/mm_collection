@@ -1,28 +1,40 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search, SearchX } from "lucide-react";
 import { useMemo, useState } from "react";
+import type { Audience } from "@/types";
+import { AUDIENCES } from "@/data/audiences";
 import { getBestSellers } from "@/data/products";
+import { cn } from "@/lib/utils";
+import { useActiveAudience } from "@/store/audience-store";
 import { POPULAR_SEARCHES, searchProducts, sortProducts, type SortValue } from "@/lib/catalog";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { ProductGrid } from "./ProductGrid";
 import { SortSelect } from "./SortSelect";
 
-export function SearchResults({ initialQuery }: { initialQuery: string }) {
+export function SearchResults({ initialQuery, scope }: { initialQuery: string; scope: Audience | null }) {
   const router = useRouter();
+  const browsing = useActiveAudience();
   const [input, setInput] = useState(initialQuery);
   const [sort, setSort] = useState<SortValue>("featured");
+  const allMatches = useMemo(() => searchProducts(initialQuery), [initialQuery]);
   const results = useMemo(() => {
-    const found = searchProducts(initialQuery);
+    const found = scope ? allMatches.filter((p) => p.audienceCategory === scope) : allMatches;
     return sort === "featured" ? found : sortProducts(found, sort);
-  }, [initialQuery, sort]);
+  }, [allMatches, scope, sort]);
+  const suggestFor = scope ?? browsing;
 
-  const submit = (q: string) => {
-    const trimmed = q.trim();
-    router.push(trimmed ? `/search?q=${encodeURIComponent(trimmed)}` : "/search");
+  const href = (q: string, s: Audience | null) => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (s) params.set("for", s);
+    const qs = params.toString();
+    return qs ? `/search?${qs}` : "/search";
   };
+  const submit = (q: string) => router.push(href(q.trim(), scope));
 
   return (
     <div className="container-page pt-6 lg:pt-8">
@@ -56,6 +68,28 @@ export function SearchResults({ initialQuery }: { initialQuery: string }) {
         </button>
       </form>
 
+      {initialQuery && allMatches.length > 0 && (
+        <nav aria-label="Search in" className="mt-6 flex flex-wrap gap-2">
+          {[null, ...AUDIENCES.map((a) => a.id)].map((a) => {
+            const count = a ? allMatches.filter((p) => p.audienceCategory === a).length : allMatches.length;
+            const label = a ? AUDIENCES.find((x) => x.id === a)!.label : "All";
+            return (
+              <Link
+                key={a ?? "all"}
+                href={href(initialQuery, a)}
+                aria-current={scope === a ? "page" : undefined}
+                className={cn(
+                  "rounded-full border px-4 py-2 text-sm font-medium transition-colors",
+                  scope === a ? "border-ink bg-ink text-white" : "border-line hover:border-ink",
+                )}
+              >
+                {label} <span className={scope === a ? "text-white/70" : "text-muted"}>({count})</span>
+              </Link>
+            );
+          })}
+        </nav>
+      )}
+
       {initialQuery && results.length > 0 && (
         <>
           <div className="mt-8 mb-5 flex items-center justify-between">
@@ -79,7 +113,7 @@ export function SearchResults({ initialQuery }: { initialQuery: string }) {
           )}
           <p className="mb-3 text-sm font-semibold">Popular searches</p>
           <div className="mb-14 flex flex-wrap gap-2">
-            {POPULAR_SEARCHES.map((s) => (
+            {POPULAR_SEARCHES[suggestFor].map((s) => (
               <button
                 key={s}
                 type="button"
@@ -90,8 +124,8 @@ export function SearchResults({ initialQuery }: { initialQuery: string }) {
               </button>
             ))}
           </div>
-          <SectionHeading title="Best sellers you might like" href="/best-sellers" />
-          <ProductGrid products={getBestSellers(4)} />
+          <SectionHeading title="Best sellers you might like" href={`/best-sellers?for=${suggestFor}`} />
+          <ProductGrid products={getBestSellers(4, suggestFor)} />
         </div>
       )}
     </div>

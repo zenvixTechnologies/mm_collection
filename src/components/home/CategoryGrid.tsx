@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
-import { categories } from "@/data/categories";
+import type { Audience } from "@/types";
+import { getAudience } from "@/data/audiences";
+import { getCategoriesByAudience } from "@/data/categories";
 import { IMG, portrait } from "@/data/images";
-import { getProductsByCategory, getNewArrivals, products } from "@/data/products";
+import { getProductsByAudience, getProductsByCategory, getNewArrivals } from "@/data/products";
 import { cn } from "@/lib/utils";
 import { ProductImage } from "@/components/ui/ProductImage";
 import { Reveal } from "@/components/ui/Reveal";
@@ -14,17 +16,31 @@ interface Tile {
   count: number;
 }
 
-export function CategoryGrid({ variant = "home" }: { variant?: "home" | "page" }) {
+export function CategoryGrid({ variant = "home", audience = "women" }: { variant?: "home" | "page"; audience?: Audience }) {
+  const info = getAudience(audience);
   const tiles: Tile[] = [
-    { href: "/shop", name: "All Products", image: portrait(IMG.rackTops), count: products.length },
-    ...categories.map((c) => ({
+    {
+      href: info.href,
+      name: `All ${info.label}`,
+      image: audience === "women" ? portrait(IMG.rackTops) : info.cardImage,
+      count: getProductsByAudience(audience).length,
+    },
+    ...getCategoriesByAudience(audience).map((c) => ({
       href: `/categories/${c.slug}`,
       name: c.name,
       image: c.image,
       count: getProductsByCategory(c.id).length,
     })),
-    { href: "/new-arrivals", name: "New Arrivals", image: portrait(IMG.ruffleBlouse), count: getNewArrivals().length },
   ];
+  // The women's row keeps its New Arrivals tile — it fills the 7-up grid to exactly two rows.
+  if (audience === "women") {
+    tiles.push({
+      href: "/new-arrivals?for=women",
+      name: "New Arrivals",
+      image: portrait(IMG.ruffleBlouse),
+      count: getNewArrivals(undefined, "women").length,
+    });
+  }
 
   if (variant === "home") {
     // Circular portrait tiles: a light, recognisable "shop by category" row.

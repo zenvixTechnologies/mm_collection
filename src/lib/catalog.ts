@@ -1,5 +1,6 @@
-import type { Product, Size } from "@/types";
-import { categories } from "@/data/categories";
+import type { Audience, Product, Size } from "@/types";
+import { AUDIENCES } from "@/data/audiences";
+import { categories, categoryFullName } from "@/data/categories";
 import { productInCategory, products } from "@/data/products";
 
 export const SORT_OPTIONS = [
@@ -20,6 +21,8 @@ export function isSortValue(v: unknown): v is SortValue {
 export const DISCOUNT_OPTIONS = [10, 20, 30, 40] as const;
 
 export interface Filters {
+  /** Women / Men / Kids — only offered where a listing mixes audiences (Shop All, New Arrivals…). */
+  audiences: Audience[];
   categories: string[];
   sizes: Size[];
   colors: string[];
@@ -30,6 +33,7 @@ export interface Filters {
 }
 
 export const EMPTY_FILTERS: Filters = {
+  audiences: [],
   categories: [],
   sizes: [],
   colors: [],
@@ -41,6 +45,7 @@ export const EMPTY_FILTERS: Filters = {
 
 export function countActiveFilters(f: Filters) {
   return (
+    f.audiences.length +
     f.categories.length +
     f.sizes.length +
     f.colors.length +
@@ -52,6 +57,7 @@ export function countActiveFilters(f: Filters) {
 
 export function applyFilters(list: Product[], f: Filters) {
   return list.filter((p) => {
+    if (f.audiences.length && !f.audiences.includes(p.audienceCategory)) return false;
     if (f.categories.length && !f.categories.some((c) => productInCategory(p, c))) return false;
     if (f.sizes.length && !f.sizes.some((s) => p.sizes.includes(s))) return false;
     if (f.colors.length && !p.colors.some((c) => f.colors.includes(c.name))) return false;
@@ -99,16 +105,28 @@ function normalize(s: string) {
 
 /** Lightweight keyword search across name, category, colours, fabric and description. */
 export function searchProducts(query: string, source: Product[] = products) {
-  const terms = normalize(query).split(/\s+/).filter(Boolean);
+  // Single letters are noise — "men's" normalises to "men s".
+  const terms = normalize(query)
+    .split(/\s+/)
+    .filter((t) => t.length > 1);
   if (!terms.length) return [];
-  const catName = (id: string) => categories.find((c) => c.id === id)?.name ?? id;
+  const catName = (id: string) => {
+    const c = categories.find((x) => x.id === id);
+    return c ? categoryFullName(c) : id;
+  };
+  const audienceWords = (a: Audience) => AUDIENCES.find((x) => x.id === a)?.keywords.join(" ") ?? a;
+  const words = (s: string) => normalize(s).split(/\s+/).filter(Boolean);
+  // Match on word starts, not substrings, so "men" never matches "women" or "moment".
+  const hits = (list: string[], t: string, stem: string) =>
+    list.some((w) => w.startsWith(t) || (stem.length > 2 && w.startsWith(stem)));
 
   return source
     .map((p) => {
-      const name = normalize(p.name);
-      const haystack = normalize(
+      const name = words(p.name);
+      const haystack = words(
         [
           p.name,
+          audienceWords(p.audienceCategory),
           catName(p.categoryId),
           ...p.tags.map(catName),
           ...p.colors.map((c) => c.name),
@@ -121,8 +139,8 @@ export function searchProducts(query: string, source: Product[] = products) {
       for (const t of terms) {
         // simple singularisation: "kurtis" → "kurti", "dresses" → "dress"
         const stem = t.replace(/(es|s)$/, "");
-        if (name.includes(t) || name.includes(stem)) score += 3;
-        else if (haystack.includes(t) || (stem.length > 2 && haystack.includes(stem))) score += 1;
+        if (hits(name, t, stem)) score += 3;
+        else if (hits(haystack, t, stem)) score += 1;
         else return { p, score: 0 };
       }
       return { p, score };
@@ -132,4 +150,8 @@ export function searchProducts(query: string, source: Product[] = products) {
     .map((x) => x.p);
 }
 
-export const POPULAR_SEARCHES = ["Kurti", "Maxi dress", "Co-ord set", "Saree", "Feeding", "Party gown"];
+export const POPULAR_SEARCHES: Record<Audience, string[]> = {
+  women: ["Kurti", "Maxi dress", "Co-ord set", "Saree", "Feeding", "Party gown"],
+  men: ["Shirt", "Jeans", "Kurta", "T-shirt", "Suit", "Chinos"],
+  kids: ["Frock", "Kurta", "Baby", "Polo", "Party dress", "Dungaree"],
+};

@@ -130,6 +130,7 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
       createdAt: now,
       items: lines.map((l) => ({
         productId: l.productId,
+        audience: l.audience,
         slug: l.slug,
         name: l.name,
         image: l.image,

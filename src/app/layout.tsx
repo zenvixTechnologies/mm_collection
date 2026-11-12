@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Cormorant_Garamond, DM_Sans } from "next/font/google";
 import { Suspense } from "react";
 import { AnnouncementBar } from "@/components/layout/AnnouncementBar";
+import { AudienceBar } from "@/components/layout/AudienceBar";
 import { CartDrawer } from "@/components/layout/CartDrawer";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
@@ -12,6 +13,7 @@ import { RouteProgress } from "@/components/layout/RouteProgress";
 import { SearchOverlay } from "@/components/layout/SearchOverlay";
 import { QuickAddModal } from "@/components/products/QuickAddModal";
 import { Toaster } from "@/components/ui/Toaster";
+import { AudienceTracker } from "@/store/audience-store";
 import { SITE } from "@/lib/utils";
 import "./globals.css";
 
@@ -26,13 +28,13 @@ const cormorant = Cormorant_Garamond({
 export const metadata: Metadata = {
   metadataBase: new URL(SITE.url),
   title: {
-    default: `${SITE.name} — Ladies' Fashion: Kurtis, Dresses & Ethnic Wear`,
+    default: `${SITE.name} — Women's Fashion, plus Men & Kids: Kurtis, Dresses & Ethnic Wear`,
     template: `%s | ${SITE.name}`,
   },
   description:
-    "Shop women's dresses, kurtis, churidhars, sarees, co-ord sets, party wear, nightwear and feeding wear at M&M COLLECTIONS. Free delivery over ₹999 and easy returns.",
+    "Shop women's dresses, kurtis, churidhars, sarees, co-ord sets, party wear and feeding wear — plus men's and kids' clothing — at M&M COLLECTIONS. Free delivery over ₹999 and easy returns.",
   applicationName: SITE.name,
-  keywords: ["M&M COLLECTIONS", "ladies fashion", "kurtis", "dresses", "churidhar", "sarees", "feeding wear", "women clothing India"],
+  keywords: ["M&M COLLECTIONS", "ladies fashion", "kurtis", "dresses", "churidhar", "sarees", "feeding wear", "women clothing India", "men's clothing", "kids clothing"],
   openGraph: {
     type: "website",
     siteName: SITE.name,
@@ -69,6 +71,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           </a>
           <AnnouncementBar />
           <Header />
+          <AudienceBar />
+          <AudienceTracker />
           <main id="main" className="min-h-[60vh]">
             {children}
           </main>

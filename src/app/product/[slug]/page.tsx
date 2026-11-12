@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { getAudience } from "@/data/audiences";
 import { getCategory } from "@/data/categories";
 import { getProductBySlug, getRelatedProducts, products } from "@/data/products";
 import { SITE } from "@/lib/utils";
@@ -39,6 +40,8 @@ export default async function ProductPage({ params }: Params) {
   const product = getProductBySlug(slug);
   if (!product) notFound();
   const category = getCategory(product.categoryId);
+  const audience = getAudience(product.audienceCategory);
+  // Same audience only — getRelatedProducts never suggests a men's shirt on a kids' frock.
   const related = getRelatedProducts(product, 4);
 
   const jsonLd = {
@@ -46,6 +49,11 @@ export default async function ProductPage({ params }: Params) {
     "@type": "Product",
     name: product.name,
     sku: product.sku,
+    audience: {
+      "@type": "PeopleAudience",
+      suggestedGender: product.audienceCategory === "women" ? "female" : product.audienceCategory === "men" ? "male" : "unisex",
+      ...(product.audienceCategory === "kids" ? { suggestedMaxAge: 10 } : { suggestedMinAge: 16 }),
+    },
     image: product.images.map((i) => `${i}&w=1200`),
     description: product.description,
     brand: { "@type": "Brand", name: SITE.name, logo: `${SITE.url}/brand/logo-512.png` },
@@ -65,7 +73,7 @@ export default async function ProductPage({ params }: Params) {
       <div className="container-page pt-5 lg:pt-8">
         <Breadcrumbs
           items={[
-            { label: "Shop", href: "/shop" },
+            { label: audience.title, href: audience.href },
             ...(category ? [{ label: category.name, href: `/categories/${category.slug}` }] : []),
             { label: product.name },
           ]}
@@ -92,7 +100,7 @@ export default async function ProductPage({ params }: Params) {
               id="related-heading"
               eyebrow="Complete the look"
               title="You may also like"
-              href={category ? `/categories/${category.slug}` : "/shop"}
+              href={category ? `/categories/${category.slug}` : audience.href}
             />
             <ProductGrid products={related} />
           </section>
