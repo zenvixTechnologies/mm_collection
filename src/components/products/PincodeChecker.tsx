@@ -7,7 +7,7 @@ type Result = { ok: true; message: string; cod: boolean } | { ok: false; message
 
 /**
  * DEMO delivery estimate — uses simple PIN code prefix rules, not a real courier API.
- * Kerala (67–69) ships fastest from our Kochi store; other Indian PINs take longer.
+ * Kerala (67–69) ships fastest from our Alappuzha store; other Indian PINs take longer.
  */
 function estimate(pin: string): Result {
   const n = Number(pin);

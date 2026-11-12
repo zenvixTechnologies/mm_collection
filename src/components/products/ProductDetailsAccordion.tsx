@@ -52,7 +52,7 @@ export function ProductDetailsAccordion({ product }: { product: Product }) {
       content: (
         <ul className="list-disc space-y-1 pl-5">
           <li>Free delivery on orders above ₹999; ₹79 below that.</li>
-          <li>Orders are dispatched within 24–48 hours from our Kochi store.</li>
+          <li>Orders are dispatched within 24–48 hours from our Alappuzha store.</li>
           <li>Delivery in 2–3 days within Kerala and 4–7 days across India.</li>
           <li>
             Read our full{" "}

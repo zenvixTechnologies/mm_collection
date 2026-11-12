@@ -36,7 +36,7 @@ export default function TermsPage() {
         Returns and refunds are governed by our <Link href="/return-policy">Return &amp; Refund Policy</Link>.
       </p>
       <h2>Governing law</h2>
-      <p>These terms are governed by the laws of India, with courts in Kochi, Kerala having jurisdiction.</p>
+      <p>These terms are governed by the laws of India, with courts in Alappuzha, Kerala having jurisdiction.</p>
     </PolicyPage>
   );
 }

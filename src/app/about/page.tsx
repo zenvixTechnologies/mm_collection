@@ -8,7 +8,7 @@ import { Reveal } from "@/components/ui/Reveal";
 
 export const metadata: Metadata = {
   title: "About Us",
-  description: "M&M COLLECTIONS is a ladies' fashion store from Kochi, bringing everyday and festive wear to women online and offline.",
+  description: "M&M COLLECTIONS is a ladies' fashion store from Alappuzha, bringing everyday and festive wear to women online and offline.",
   alternates: { canonical: "/about" },
 };
 
@@ -16,7 +16,7 @@ const values = [
   { icon: Ruler, title: "Fit comes first", text: "Every style is checked against our size chart so what arrives fits like you expect." },
   { icon: Leaf, title: "Breathable fabrics", text: "Cottons, linens and rayons chosen for India's climate — comfortable from morning to night." },
   { icon: HeartHandshake, title: "Real support", text: "Talk to a real person on phone or WhatsApp for sizing, styling or order help." },
-  { icon: Store, title: "Online & in-store", text: "Shop on our website or visit our boutique in Kochi to try before you buy." },
+  { icon: Store, title: "Online & in-store", text: "Shop on our website or visit our boutique in Alappuzha to try before you buy." },
 ];
 
 export default function AboutPage() {
@@ -31,7 +31,7 @@ export default function AboutPage() {
               Fashion that fits real life
             </h1>
             <p className="mt-5 text-[16px] leading-8 text-muted">
-              M&amp;M COLLECTIONS began as a small boutique in Kochi with one simple idea: every woman deserves clothes that look
+              M&amp;M COLLECTIONS began as a small boutique in Alappuzha with one simple idea: every woman deserves clothes that look
               beautiful, feel comfortable and are easy to buy. What started with a rail of handpicked kurtis has grown into a
               collection of dresses, churidhars, silk sarees, co-ord sets, nightwear and thoughtfully designed feeding wear.
             </p>

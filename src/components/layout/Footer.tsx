@@ -37,7 +37,7 @@ export function Footer() {
           <Logo size="footer" onDark />
           <p className="mt-4 max-w-xs text-sm leading-6 text-white/65">
             {SITE.name} brings you thoughtfully chosen ladies&apos; fashion — everyday kurtis, dresses, festive wear and
-            feeding wear — online and at our store in Kochi.
+            feeding wear — online and at our store in Alappuzha.
           </p>
           <ul className="mt-5 flex gap-2" aria-label="Social media">
             {socials.map((s) => (

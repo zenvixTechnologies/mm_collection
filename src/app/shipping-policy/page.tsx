@@ -18,7 +18,7 @@ export default function ShippingPolicyPage() {
         <li>The FREESHIP coupon waives the delivery fee on any order.</li>
       </ul>
       <h2>Processing time</h2>
-      <p>Orders are packed and dispatched from our Kochi store within 24–48 hours (excluding Sundays and public holidays).</p>
+      <p>Orders are packed and dispatched from our Alappuzha store within 24–48 hours (excluding Sundays and public holidays).</p>
       <h2>Delivery timelines</h2>
       <ul>
         <li>Within Kerala: 2–3 working days.</li>

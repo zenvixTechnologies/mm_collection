@@ -23,7 +23,7 @@ export default function ContactPage() {
     { icon: <Phone size={19} />, label: "Call us", value: SITE.phone, href: `tel:${SITE.phone.replace(/\s/g, "")}` },
     { icon: <WhatsappIcon size={19} />, label: "WhatsApp", value: SITE.whatsapp, href: `https://wa.me/${SITE.whatsapp.replace(/\D/g, "")}` },
     { icon: <Mail size={19} />, label: "Email", value: SITE.email, href: `mailto:${SITE.email}` },
-    { icon: <MapPin size={19} />, label: "Visit the store", value: SITE.address },
+    { icon: <MapPin size={19} />, label: "Visit the store", value: SITE.address, href: SITE.mapLink },
     { icon: <Clock size={19} />, label: "Store hours", value: SITE.hours },
   ];
 
@@ -70,6 +70,36 @@ export default function ContactPage() {
           <ContactForm />
         </section>
       </div>
+
+      <section aria-labelledby="map-heading" className="mt-20">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 id="map-heading" className="font-display text-3xl font-semibold">
+              Find our store
+            </h2>
+            <p className="mt-1 text-muted">{SITE.address}</p>
+          </div>
+          <a
+            href={SITE.mapLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-full border border-ink px-5 py-2.5 text-sm font-medium transition-colors hover:bg-ink hover:text-white"
+          >
+            <MapPin size={16} /> Get directions
+          </a>
+        </div>
+        <div className="mt-6 overflow-hidden rounded-2xl border border-line">
+          <iframe
+            src={SITE.mapEmbed}
+            title={`Map showing ${SITE.name} near Thumpoly Church, Alappuzha`}
+            className="block h-[320px] w-full sm:h-[420px]"
+            style={{ border: 0 }}
+            allowFullScreen
+            loading="lazy"
+            referrerPolicy="strict-origin-when-cross-origin"
+          />
+        </div>
+      </section>
 
       <section aria-labelledby="faq-heading" className="mt-20">
         <h2 id="faq-heading" className="font-display text-3xl font-semibold">

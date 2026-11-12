@@ -52,9 +52,12 @@ export const SITE = {
   tagline: "Everyday elegance for every woman",
   url: "https://mmcollections.in",
   email: "hello@mmcollections.in",
-  phone: "+91 98765 43210",
-  whatsapp: "+91 98765 43210",
-  address: "Ground Floor, Rose Arcade, MG Road, Kochi, Kerala 682016",
+  phone: "+91 94973 42612",
+  whatsapp: "+91 94973 42612",
+  address: "Near Thumpoly Church, Thumpoly P.O, Alappuzha, Kerala 688008",
+  mapEmbed:
+    "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d59842.75821526355!2d76.24201084863284!3d9.520344299999998!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3b088434d86ad845%3A0x4507fdbdd26e32ca!2sSt.%20Thomas%20Roman%20Catholic%20Church%20-%20Marian%20Pilgrimage%20Shrine%20Church%20(Thumpoly%20Church%2C%20Alappuzha)!5e1!3m2!1sen!2sin!4v1794459222357!5m2!1sen!2sin",
+  mapLink: "https://www.google.com/maps/search/?api=1&query=Thumpoly+Church+Alappuzha",
   hours: "Mon – Sat, 10:00 AM – 8:00 PM",
 };
 
