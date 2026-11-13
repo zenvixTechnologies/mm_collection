@@ -8,7 +8,7 @@ import { Reveal } from "@/components/ui/Reveal";
 
 export const metadata: Metadata = {
   title: "About Us",
-  description: "M&M COLLECTIONS is a ladies' fashion store from Alappuzha, bringing everyday and festive wear to women online and offline.",
+  description: "M&M COLLECTIONS is a family fashion destination from Alappuzha, bringing styles for women, men and kids online and in-store.",
   alternates: { canonical: "/about" },
 };
 
@@ -28,32 +28,71 @@ export default function AboutPage() {
           <div>
             <p className="eyebrow">Our story</p>
             <h1 className="mt-3 font-display text-4xl leading-tight font-semibold sm:text-5xl lg:text-6xl">
-              Fashion that fits real life
+              Fashion for Every Generation, Every Occasion.
             </h1>
-            <p className="mt-5 text-[16px] leading-8 text-muted">
-              M&amp;M COLLECTIONS began as a small boutique in Alappuzha with one simple idea: every woman deserves clothes that look
-              beautiful, feel comfortable and are easy to buy. What started with a rail of handpicked kurtis has grown into a
-              collection of dresses, churidhars, silk sarees, co-ord sets, nightwear and thoughtfully designed feeding wear.
-            </p>
-            <p className="mt-4 text-[16px] leading-8 text-muted">
-              Today we serve customers across India online, while our store continues to welcome walk-in shoppers. Whether
-              it&apos;s an office day, a family function or the first weeks of motherhood, we want you to find something that
-              feels like you.
+            <p className="mt-5 text-lg leading-8 text-muted">
+              M&amp;M COLLECTIONS began its journey as a small boutique in Alappuzha, built around a simple belief: fashion should
+              make everyone feel confident, comfortable and special.
             </p>
             <Link href="/shop" className="btn-primary mt-8">
               Explore the collection
             </Link>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="relative aspect-[4/5] overflow-hidden rounded-2xl">
+            <div className="relative aspect-4/5 overflow-hidden rounded-2xl">
               <ProductImage src={portrait(IMG.boutique)} alt="Clothing displayed in the M&M COLLECTIONS boutique" fill priority sizes="(min-width: 1024px) 25vw, 50vw" />
             </div>
-            <div className="relative mt-10 aspect-[4/5] overflow-hidden rounded-2xl">
+            <div className="relative mt-10 aspect-4/5 overflow-hidden rounded-2xl">
               <ProductImage src={portrait(IMG.neutralRack)} alt="Rail of neutral-toned garments" fill priority sizes="(min-width: 1024px) 25vw, 50vw" />
             </div>
           </div>
         </div>
       </div>
+
+      <section className="container-page mt-20 grid gap-8 lg:grid-cols-12 lg:gap-16" aria-labelledby="journey-heading">
+        <div className="lg:col-span-4">
+          <div className="lg:sticky lg:top-28">
+            <p className="eyebrow">Our journey</p>
+            <h2 id="journey-heading" className="mt-3 font-display text-3xl leading-tight font-semibold sm:text-4xl">
+              From a boutique in Alappuzha to a fashion destination for the whole family
+            </h2>
+          </div>
+        </div>
+        <div className="space-y-5 text-[16px] leading-8 text-muted lg:col-span-8">
+          <p>
+            What started with a carefully curated collection of women&apos;s kurtis has gradually evolved into a fashion
+            destination for the entire family. Today, we bring together a diverse range of styles for women, men and kids,
+            thoughtfully selected to suit different tastes, lifestyles and occasions.
+          </p>
+          <p>
+            From elegant dresses, churidhars, silk sarees, co-ord sets, nightwear and comfortable feeding wear for women, to
+            stylish everyday essentials and contemporary outfits for men, along with adorable and comfortable clothing for kids,
+            our collections celebrate individuality at every age.
+          </p>
+          <p>
+            We believe that great fashion is not just about what you wear, but how it makes you feel. Whether you&apos;re
+            dressing for a busy workday, a special celebration, a casual outing or simply looking for everyday comfort, M&amp;M
+            COLLECTIONS brings together styles that make every moment feel special.
+          </p>
+          <p>
+            From our boutique in Alappuzha to customers across India through our online store, we continue to make fashion more
+            accessible, convenient and enjoyable for everyone.
+          </p>
+          <p>
+            At M&amp;M COLLECTIONS, we are more than just a clothing store. We are a destination where every member of the family
+            can discover their style, express their personality and find something they truly love.
+          </p>
+        </div>
+      </section>
+
+      <section className="container-page mt-16" aria-label="Our promise">
+        <Reveal className="rounded-2xl border border-line px-6 py-12 text-center sm:px-12">
+          <p className="eyebrow">M&amp;M COLLECTIONS</p>
+          <p className="mx-auto mt-4 max-w-3xl font-display text-3xl leading-tight font-semibold sm:text-4xl">
+            Your Style. Your Family. Your Fashion Destination.
+          </p>
+        </Reveal>
+      </section>
 
       <section className="mt-20 bg-sand py-16" aria-labelledby="values-heading">
         <div className="container-page">
