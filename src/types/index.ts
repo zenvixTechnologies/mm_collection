@@ -172,8 +172,26 @@ export interface CustomerDetails {
   email: string;
 }
 
-/** "cod" is no longer offered at checkout; it stays in the type so older saved orders still display. */
-export type PaymentMethod = "cod" | "upi" | "card";
+/**
+ * Domestic (India-only) payment methods, collected through Razorpay.
+ * "cod" is no longer offered at checkout; it stays in the type so older saved orders still display.
+ */
+export type PaymentMethod = "cod" | "upi" | "card" | "netbanking";
+
+/** The only country we deliver to and accept payments from. */
+export const STORE_COUNTRY = "India" as const;
+export const STORE_CURRENCY = "INR" as const;
+
+/** Server-verified Razorpay payment reference stored with an order. */
+export interface PaymentRecord {
+  provider: "razorpay";
+  mode: "test" | "live";
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  currency: typeof STORE_CURRENCY;
+  /** Amount actually captured, in rupees — taken from Razorpay, never from the browser. */
+  amount: number;
+}
 
 export const ORDER_STATUSES = [
   "Order Placed",
@@ -205,6 +223,8 @@ export interface Order {
   customer: CustomerDetails;
   address: Address;
   paymentMethod: PaymentMethod;
+  /** Present for orders paid through Razorpay; absent on older/sample orders. */
+  payment?: PaymentRecord;
   couponCode: string | null;
   subtotal: number;
   discount: number;

@@ -4,7 +4,7 @@ export const offers: Offer[] = [
   {
     id: "o1",
     title: "Delivered across India in 3–7 days",
-    subtitle: "Shipping charges applicable · Pay securely by UPI or card",
+    subtitle: "Shipping charges applicable · Pay securely by UPI, card or net banking",
     href: "/shipping-policy",
   },
   {

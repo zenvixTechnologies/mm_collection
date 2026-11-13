@@ -100,6 +100,7 @@ export function Footer() {
             We accept
             <span className="rounded border border-white/15 px-1.5 py-0.5 font-semibold text-white/85">UPI</span>
             <span className="rounded border border-white/15 px-1.5 py-0.5 font-semibold text-white/85">Cards</span>
+            <span className="rounded border border-white/15 px-1.5 py-0.5 font-semibold text-white/85">Net Banking</span>
           </p>
         </div>
       </div>

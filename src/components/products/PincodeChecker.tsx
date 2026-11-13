@@ -67,7 +67,7 @@ export function PincodeChecker() {
               <p className="flex items-center gap-1.5">
                 <CheckCircle2 size={14} /> {result.message}
               </p>
-              <p className="pl-5 text-muted">Shipping Charges Applicable · Prepaid orders (UPI / card)</p>
+              <p className="pl-5 text-muted">Shipping Charges Applicable · Prepaid orders (UPI / card / net banking)</p>
             </div>
           ) : (
             <p className="flex items-center gap-1.5 text-danger">

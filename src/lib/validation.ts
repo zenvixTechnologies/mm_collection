@@ -11,7 +11,6 @@ export const INDIAN_STATES = [
 
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export const PIN_RE = /^[1-9]\d{5}$/;
-export const UPI_RE = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
 
 /** Normalises +91 / 0 prefixes and returns the 10-digit number. */
 export function normalizeMobile(value: string) {
@@ -41,7 +40,44 @@ export function validateCheckout(f: CheckoutForm): FormErrors<CheckoutForm> {
   if (!f.city.trim()) e.city = "City is required.";
   if (!f.district.trim()) e.district = "District is required.";
   if (!f.state) e.state = "Please select your state.";
+  else if (!INDIAN_STATES.includes(f.state)) e.state = "We currently deliver within India only — please pick an Indian state.";
   if (!f.pincode.trim()) e.pincode = "PIN code is required.";
   else if (!PIN_RE.test(f.pincode.trim())) e.pincode = "Enter a valid 6-digit PIN code.";
   return e;
+}
+
+const str = (v: unknown, max = 200) => (typeof v === "string" ? v.slice(0, max) : "");
+
+/**
+ * Server-side: coerce an untrusted JSON body into a checkout form and validate it.
+ * Only Indian delivery addresses are accepted (Indian state + 6-digit PIN + optional country "India").
+ */
+export function parseCheckoutInput(input: unknown):
+  | { ok: true; customer: CustomerDetails; address: Address }
+  | { ok: false; errors: FormErrors<CheckoutForm> | { country: string } } {
+  const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const c = (body.customer && typeof body.customer === "object" ? body.customer : {}) as Record<string, unknown>;
+  const a = (body.address && typeof body.address === "object" ? body.address : {}) as Record<string, unknown>;
+  const country = str(a.country ?? "India").trim();
+  if (country.toLowerCase() !== "india" && country.toUpperCase() !== "IN") {
+    return { ok: false, errors: { country: "We currently deliver within India only." } };
+  }
+  const form: CheckoutForm = {
+    fullName: str(c.fullName).trim(),
+    mobile: str(c.mobile, 20).trim(),
+    email: str(c.email).trim(),
+    house: str(a.house).trim(),
+    street: str(a.street).trim(),
+    city: str(a.city).trim(),
+    district: str(a.district).trim(),
+    state: str(a.state).trim(),
+    pincode: str(a.pincode, 10).trim(),
+  };
+  const errors = validateCheckout(form);
+  if (Object.keys(errors).length) return { ok: false, errors };
+  return {
+    ok: true,
+    customer: { fullName: form.fullName, mobile: normalizeMobile(form.mobile), email: form.email },
+    address: { house: form.house, street: form.street, city: form.city, district: form.district, state: form.state, pincode: form.pincode },
+  };
 }

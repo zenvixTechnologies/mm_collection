@@ -1,6 +1,6 @@
 # M&M COLLECTIONS — storefront
 
-Women's fashion e-commerce frontend built with Next.js 15 (App Router), React 19, TypeScript,
+India-only family fashion e-commerce site (women, men and kids) built with Next.js 15 (App Router), React 19, TypeScript,
 Tailwind CSS 4, Zustand, Framer Motion and Lucide icons.
 
 ## Run
@@ -25,13 +25,35 @@ npm test           # unit tests (Vitest)
 - **Coupons:** `WELCOME10`, `FIRSTORDER` (min ₹799), `SAVE15` (min ₹1,999), `FESTIVE20` (min ₹2,999)
 - **Sample order IDs for tracking:** `MM24A7K1`, `MM24A3F9`, `MM24931C`
 
+## India-only store & Razorpay payments
+
+M&M COLLECTIONS serves customers in India only: prices are in INR (₹), delivery addresses must be
+Indian (Indian state + valid 6-digit PIN, country fixed to India), and payments are domestic only.
+
+Payments use **Razorpay Standard Checkout** with UPI, Indian debit/credit cards and net banking
+(wallets, EMI and pay-later are hidden; international cards and non-INR payments are rejected).
+
+1. Copy `.env.example` to `.env.local` and add your Razorpay **Test Mode** keys (`rzp_test_…`).
+2. For **Live Mode** after account approval, replace them with `rzp_live_…` keys — no code change.
+   Keep international payments disabled in the Razorpay dashboard.
+
+Flow:
+
+- `POST /api/payments/razorpay/order` validates the address, re-prices the bag from the catalogue
+  (`src/lib/order-quote.ts`, prices from the browser are ignored) and creates an INR Razorpay order.
+- `POST /api/payments/razorpay/verify` checks the HMAC signature, fetches the order and payment from
+  Razorpay, rejects international / non-INR / unsupported-method / wrong-amount payments, captures
+  if needed and returns the confirmed amount.
+
 ## What is simulated
 
-This is a frontend demo. There is no backend:
+There is no database yet:
 
-- Cart, wishlist, orders, accounts and recently-viewed items live in the browser's `localStorage`.
+- Cart, wishlist, orders, accounts and recently-viewed items live in the browser's `localStorage`
+  (paid orders are recorded there after server verification — add a database and a Razorpay
+  webhook before going live so paid orders are stored server-side).
 - Authentication is mock-only. Passwords are stored in plain text locally; do not reuse real ones.
-- UPI and card payments are simulated: no card details are collected and no money is taken. Cash on Delivery is disabled.
+- Cash on Delivery is disabled.
 - Shipping shows "Shipping Charges Applicable" only: no shipping amount is calculated or added to totals yet.
 - PIN code delivery estimates, order tracking statuses, the newsletter and contact forms use dummy logic.
 
