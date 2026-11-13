@@ -3,15 +3,24 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { CreditCard, Info, Loader2, Lock, ShoppingBag, Smartphone } from "lucide-react";
+import { CreditCard, Info, Landmark, Loader2, Lock, ShoppingBag, Smartphone } from "lucide-react";
 import { useRef, useState } from "react";
-import type { Address, CartItem, Order, PaymentMethod } from "@/types";
+import {
+  STORE_COUNTRY,
+  type Address,
+  type CartItem,
+  type CartTotals,
+  type Order,
+  type OrderItem,
+  type PaymentMethod,
+  type PaymentRecord,
+} from "@/types";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { calculateTotals } from "@/lib/pricing";
-import { cn, formatPrice, generateOrderId } from "@/lib/utils";
+import { DOMESTIC_ONLY_CONFIG, loadRazorpay, openRazorpay, type RazorpaySuccess } from "@/lib/razorpay/checkout";
+import { SITE, cn, formatPrice } from "@/lib/utils";
 import {
   INDIAN_STATES,
-  UPI_RE,
   normalizeMobile,
   validateCheckout,
   type CheckoutForm,
@@ -42,11 +51,40 @@ const EMPTY: CheckoutForm = {
   pincode: "",
 };
 
-// Prepaid only — Cash on Delivery is not offered.
-const PAYMENT_OPTIONS: { id: PaymentMethod; label: string; desc: string; icon: typeof CreditCard }[] = [
+type OnlineMethod = Extract<PaymentMethod, "upi" | "card" | "netbanking">;
+
+// Prepaid only, through Razorpay, for Indian customers — no Cash on Delivery, no international payments.
+const PAYMENT_OPTIONS: { id: OnlineMethod; label: string; desc: string; icon: typeof CreditCard }[] = [
   { id: "upi", label: "UPI", desc: "Google Pay, PhonePe, Paytm or any UPI app", icon: Smartphone },
-  { id: "card", label: "Credit / Debit Card", desc: "Visa, Mastercard, RuPay", icon: CreditCard },
+  { id: "card", label: "Credit / Debit Card", desc: "Indian Visa, Mastercard and RuPay cards", icon: CreditCard },
+  { id: "netbanking", label: "Net Banking", desc: "All major Indian banks", icon: Landmark },
 ];
+
+interface CreateOrderResponse {
+  orderId: string;
+  razorpayOrderId: string;
+  amount: number;
+  currency: "INR";
+  keyId: string;
+  mode: "test" | "live";
+  totals: CartTotals;
+}
+
+interface VerifyResponse {
+  orderId: string;
+  paymentMethod: PaymentMethod;
+  payment: PaymentRecord;
+  items: OrderItem[];
+  totals: CartTotals;
+  couponCode: string | null;
+}
+
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) throw new Error(data.error || "Something went wrong. Please try again.");
+  return data;
+}
 
 export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
   const hydrated = useHydrated();
@@ -68,9 +106,7 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
   const [form, setForm] = useState<CheckoutForm>(EMPTY);
   const [prefilledFor, setPrefilledFor] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors<CheckoutForm>>({});
-  const [payment, setPayment] = useState<PaymentMethod>("upi");
-  const [upiId, setUpiId] = useState("");
-  const [upiError, setUpiError] = useState("");
+  const [payment, setPayment] = useState<OnlineMethod>("upi");
   const [placing, setPlacing] = useState(false);
   const [saveAddress, setSaveAddress] = useState(true);
   const formRef = useRef<HTMLFormElement>(null);
@@ -98,16 +134,12 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
     setErrors({});
   };
 
-  const placeOrder = (e: React.FormEvent) => {
+  const placeOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (placing) return;
     const errs = validateCheckout(form);
-    let upiInvalid = false;
-    if (payment === "upi" && !UPI_RE.test(upiId.trim())) {
-      setUpiError("Enter a valid UPI ID, e.g. name@okbank");
-      upiInvalid = true;
-    }
     setErrors(errs);
-    if (Object.keys(errs).length || upiInvalid) {
+    if (Object.keys(errs).length) {
       toast.error("Please fix the highlighted fields");
       // Move focus to the first invalid field.
       window.setTimeout(() => {
@@ -125,42 +157,82 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
       state: form.state,
       pincode: form.pincode.trim(),
     };
-    const now = new Date().toISOString();
-    const order: Order = {
-      id: generateOrderId(),
-      createdAt: now,
-      items: lines.map((l) => ({
-        productId: l.productId,
-        audience: l.audience,
-        slug: l.slug,
-        name: l.name,
-        image: l.image,
-        price: l.price,
-        size: l.size,
-        color: l.color,
-        quantity: l.quantity,
-      })),
-      customer: { fullName: form.fullName.trim(), mobile: normalizeMobile(form.mobile), email: form.email.trim() },
-      address,
-      paymentMethod: payment,
-      couponCode: totals.couponDiscount > 0 ? couponCode : null,
-      subtotal: totals.subtotal,
-      discount: totals.couponDiscount,
-      // Shipping charges are applicable but not calculated yet, so they are not part of the total.
-      shipping: null,
-      total: totals.total,
-      status: "Order Placed",
-      history: { "Order Placed": now },
+    const customer = { fullName: form.fullName.trim(), mobile: normalizeMobile(form.mobile), email: form.email.trim() };
+    // Only item IDs, variants and quantities are sent — the server prices the order itself.
+    const items = lines.map((l) => ({ productId: l.productId, size: l.size, color: l.color, quantity: l.quantity }));
+    const appliedCoupon = totals.couponDiscount > 0 ? couponCode : null;
+    const fail = (message: string) => {
+      setPlacing(false);
+      toast.error(message);
     };
 
-    // Simulated processing delay — no real payment is taken in this demo.
-    window.setTimeout(() => {
-      addOrder(order);
-      if (user && saveAddress) addAddress(address);
-      if (isBuyNow) clearBuyNow();
-      else clearCart();
-      router.replace(`/order-success?id=${order.id}`);
-    }, 1100);
+    let created: CreateOrderResponse;
+    try {
+      created = await postJson<CreateOrderResponse>("/api/payments/razorpay/order", {
+        items,
+        couponCode: appliedCoupon,
+        customer,
+        address: { ...address, country: STORE_COUNTRY },
+      });
+    } catch (err) {
+      return fail((err as Error).message);
+    }
+
+    if (!(await loadRazorpay())) return fail("Couldn't load the payment window. Check your connection and try again.");
+
+    const onPaid = async (res: RazorpaySuccess) => {
+      try {
+        const v = await postJson<VerifyResponse>("/api/payments/razorpay/verify", { ...res, items, couponCode: appliedCoupon });
+        const now = new Date().toISOString();
+        const order: Order = {
+          id: v.orderId,
+          createdAt: now,
+          items: v.items,
+          customer,
+          address,
+          paymentMethod: v.paymentMethod,
+          payment: v.payment,
+          couponCode: v.couponCode,
+          subtotal: v.totals.subtotal,
+          discount: v.totals.couponDiscount,
+          // Shipping charges are applicable but not calculated yet, so they are not part of the total.
+          shipping: null,
+          // The amount Razorpay actually captured, as confirmed by our server.
+          total: v.payment.amount,
+          status: "Order Placed",
+          history: { "Order Placed": now },
+        };
+        addOrder(order);
+        if (user && saveAddress) addAddress(address);
+        if (isBuyNow) clearBuyNow();
+        else clearCart();
+        router.replace(`/order-success?id=${order.id}`);
+      } catch (err) {
+        fail((err as Error).message);
+      }
+    };
+
+    try {
+      openRazorpay(
+        {
+          key: created.keyId,
+          amount: created.amount,
+          currency: "INR",
+          order_id: created.razorpayOrderId,
+          name: SITE.name,
+          description: `Order ${created.orderId}`,
+          prefill: { name: customer.fullName, email: customer.email, contact: `+91${customer.mobile}`, method: payment },
+          notes: { store_order_id: created.orderId },
+          theme: { color: "#b3121b" },
+          config: DOMESTIC_ONLY_CONFIG,
+          modal: { ondismiss: () => fail("Payment cancelled. Your bag is saved — you can try again.") },
+          handler: (res) => void onPaid(res),
+        },
+        (message) => toast.error(message),
+      );
+    } catch {
+      fail("Couldn't open the payment window. Please try again.");
+    }
   };
 
   if (!hydrated) {
@@ -291,6 +363,16 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
                 onChange={set("pincode")}
                 error={errors.pincode}
               />
+              <Field
+                label="Country"
+                name="country"
+                autoComplete="country-name"
+                value={STORE_COUNTRY}
+                readOnly
+                aria-readonly
+                hint="We currently deliver within India only"
+                className="sm:col-span-2"
+              />
             </div>
             {user && (
               <label className="mt-4 flex items-center gap-2.5 text-sm">
@@ -330,31 +412,13 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
                           className="overflow-hidden"
                         >
                           <div className="px-4 pb-4">
-                            {opt.id === "upi" && (
-                              <div className="mb-3">
-                                <label htmlFor="upi" className="field-label">
-                                  UPI ID<span className="text-accent" aria-hidden> *</span>
-                                </label>
-                                <input
-                                  id="upi"
-                                  value={upiId}
-                                  onChange={(e) => {
-                                    setUpiId(e.target.value);
-                                    setUpiError("");
-                                  }}
-                                  placeholder="yourname@okbank"
-                                  autoComplete="off"
-                                  aria-invalid={upiError ? true : undefined}
-                                  className="field-input"
-                                />
-                                {upiError && <p className="field-error">{upiError}</p>}
-                              </div>
-                            )}
                             <p className="flex gap-2 rounded-xl bg-white px-3 py-2.5 text-[13px] text-muted">
                               <Info size={15} className="mt-0.5 shrink-0 text-accent" />
                               {opt.id === "upi"
-                                ? "Demo store: no UPI request is actually sent and no money is collected. Your order will be recorded as a simulated UPI payment."
-                                : "Demo store: card details are not collected. A live store would redirect you to a secure, PCI-compliant payment gateway here. Your order will be recorded as a simulated card payment."}
+                                ? "You'll approve the payment in your UPI app through Razorpay's secure checkout."
+                                : opt.id === "card"
+                                  ? "Card details are entered on Razorpay's secure, PCI-DSS compliant checkout — we never see or store them. Only cards issued in India are accepted."
+                                  : "You'll log in to your bank securely through Razorpay to approve the payment."}
                             </p>
                           </div>
                         </motion.div>
@@ -398,7 +462,7 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
           <OrderSummary totals={totals} couponCode={couponCode} title="Price details">
             <button type="submit" disabled={placing} className="btn-accent mt-5 hidden min-h-13 w-full text-[15px] lg:flex">
               {placing ? <Loader2 size={18} className="animate-spin" /> : <Lock size={16} />}
-              {placing ? "Placing your order…" : `Place Order · ${formatPrice(totals.total)}`}
+              {placing ? "Processing payment…" : `Place Order · ${formatPrice(totals.total)}`}
             </button>
             <p className="mt-3 hidden text-center text-xs text-muted lg:block">
               By placing your order you agree to our{" "}
@@ -422,7 +486,7 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
           </div>
           <button type="submit" disabled={placing} className="btn-accent min-h-12 flex-1">
             {placing ? <Loader2 size={18} className="animate-spin" /> : <Lock size={15} />}
-            {placing ? "Placing…" : "Place Order"}
+            {placing ? "Processing…" : "Place Order"}
           </button>
         </div>
       </form>

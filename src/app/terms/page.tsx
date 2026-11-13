@@ -15,13 +15,15 @@ export default function TermsPage() {
       <p className="mt-6">By using the {SITE.name} website and placing an order, you agree to the following terms.</p>
       <h2>Products & pricing</h2>
       <ul>
-        <li>All prices are in Indian Rupees (₹) and include applicable taxes.</li>
+        <li>All prices are in Indian Rupees (₹) and include applicable taxes. Shipping charges are applicable.</li>
         <li>Colours may vary slightly from photos due to screen settings and lighting.</li>
         <li>We may update prices and availability without notice; the price at checkout applies.</li>
       </ul>
       <h2>Orders</h2>
       <ul>
-        <li>An order is confirmed once you receive an order ID.</li>
+        <li>We currently accept orders for delivery within India only. We do not ship internationally.</li>
+        <li>Payments are accepted in Indian Rupees (₹) only, through Razorpay, by UPI, Indian credit / debit cards or net banking.</li>
+        <li>An order is confirmed once your payment is verified and you receive an order ID.</li>
         <li>We may cancel an order if an item is unavailable or a pricing error occurs; any payment will be refunded in full.</li>
       </ul>
       <h2>Coupons</h2>

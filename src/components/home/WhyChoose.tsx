@@ -15,7 +15,7 @@ const reasons = [
   {
     icon: Truck,
     title: "Convenient ordering",
-    text: "Pay securely by UPI or card, with delivery across India. Shipping charges applicable.",
+    text: "Pay securely by UPI, card or net banking, with delivery across India. Shipping charges applicable.",
   },
   {
     icon: Headphones,

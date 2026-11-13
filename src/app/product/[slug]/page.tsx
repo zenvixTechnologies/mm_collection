@@ -62,6 +62,7 @@ export default async function ProductPage({ params }: Params) {
       "@type": "Offer",
       priceCurrency: "INR",
       price: product.price,
+      eligibleRegion: { "@type": "Country", name: "IN" },
       availability: product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
       url: `${SITE.url}/product/${product.slug}`,
     },

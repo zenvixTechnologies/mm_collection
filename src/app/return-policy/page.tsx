@@ -32,7 +32,10 @@ export default function ReturnPolicyPage() {
       </ul>
       <h2>Refunds</h2>
       <ul>
-        <li>Prepaid orders (UPI / card): refunded to the original payment method within 5–7 working days of the quality check.</li>
+        <li>
+          Prepaid orders (UPI / card / net banking): refunded in Indian Rupees (₹) to the original payment method through Razorpay
+          within 5–7 working days of the quality check.
+        </li>
         <li>The shipping charge is non-refundable unless the item was damaged or incorrect.</li>
       </ul>
       <h2>Damaged or incorrect items</h2>

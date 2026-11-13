@@ -2,7 +2,7 @@ import { MessageCircle, RotateCcw, ShieldCheck, Truck } from "lucide-react";
 
 const items = [
   { icon: Truck, title: "Pan-India delivery", text: "Shipping charges applicable" },
-  { icon: ShieldCheck, title: "Secure payments", text: "UPI & cards" },
+  { icon: ShieldCheck, title: "Secure payments", text: "UPI, cards & net banking" },
   { icon: RotateCcw, title: "7-day returns", text: "Easy size exchanges" },
   { icon: MessageCircle, title: "WhatsApp help", text: "Sizing & styling advice" },
 ];

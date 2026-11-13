@@ -65,9 +65,12 @@ export function OrderSuccessView({ id }: { id: string }) {
             Your order has been placed, {order.customer.fullName.split(" ")[0]}. A confirmation would be sent to{" "}
             <strong className="text-ink">{order.customer.email}</strong>.
           </p>
-          <p className="mx-auto mt-3 max-w-md text-xs text-muted">
-            This is a demo store — no payment was taken and no items will be shipped.
-          </p>
+          {order.payment ? (
+            <p className="mx-auto mt-3 max-w-md text-xs text-muted">
+              Paid {formatPrice(order.payment.amount)} via Razorpay · Payment ID {order.payment.razorpayPaymentId}
+              {order.payment.mode === "test" && " · Test Mode — no real money was charged"}
+            </p>
+          ) : null}
         </motion.div>
       </div>
 

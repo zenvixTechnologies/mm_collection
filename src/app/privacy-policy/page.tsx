@@ -30,7 +30,10 @@ export default function PrivacyPolicyPage() {
         <li>To improve our website and product range.</li>
       </ul>
       <h2>Payments</h2>
-      <p>We do not store card details. Online payments in a live store are handled by PCI-DSS compliant payment partners.</p>
+      <p>
+        Online payments are processed by Razorpay, a PCI-DSS compliant payment gateway. We never see or store your card details, UPI PIN
+        or net banking login.
+      </p>
       <h2>Sharing</h2>
       <p>We share only what&apos;s needed with delivery and payment partners to complete your order. We never sell your personal data.</p>
       <h2>Your choices</h2>

@@ -14,7 +14,8 @@ export const metadata: Metadata = {
 const FAQ = [
   ["How long does delivery take?", "2–3 working days within Kerala and 4–7 days elsewhere in India."],
   ["Can I exchange for a different size?", "Yes — size exchanges are free within 7 days of delivery, subject to stock."],
-  ["Do you offer Cash on Delivery?", "No — all orders are prepaid by UPI or credit / debit card. Shipping charges are applicable."],
+  ["Do you offer Cash on Delivery?", "No — all orders are prepaid online through Razorpay by UPI, Indian credit / debit card or net banking. Shipping charges are applicable."],
+  ["Do you ship outside India?", "Not at the moment. We deliver only to addresses within India and accept payments in Indian Rupees (₹) only."],
   ["Can I visit the store?", `Absolutely. We're at ${SITE.address}.`],
 ];
 

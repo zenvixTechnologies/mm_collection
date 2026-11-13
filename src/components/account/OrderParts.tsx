@@ -10,8 +10,9 @@ import { ProductImage } from "@/components/ui/ProductImage";
 
 export const PAYMENT_LABEL: Record<PaymentMethod, string> = {
   cod: "Cash on Delivery",
-  upi: "UPI (simulated)",
-  card: "Credit / Debit Card (simulated)",
+  upi: "UPI",
+  card: "Credit / Debit Card",
+  netbanking: "Net Banking",
 };
 
 const STATUS_ICON = [ClipboardCheck, CheckCircle2, Package, Truck, Home, PackageCheck];
@@ -140,7 +141,7 @@ export function AddressBlock({ order }: { order: Order }) {
       <br />
       {a.city}, {a.district}
       <br />
-      {a.state} – {a.pincode}
+      {a.state} – {a.pincode}, India
       <br />
       Mobile: {order.customer.mobile}
     </address>
