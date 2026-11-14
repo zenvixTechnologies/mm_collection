@@ -7,6 +7,12 @@ import { cn } from "@/lib/utils";
 
 type Variant = "center" | "right" | "left" | "top" | "bottom-sheet";
 
+const WIDTH: Record<"md" | "lg" | "xl", { center: string; right: string }> = {
+  md: { center: "max-w-lg", right: "max-w-[420px]" },
+  lg: { center: "max-w-2xl", right: "max-w-[560px]" },
+  xl: { center: "max-w-4xl", right: "max-w-[720px]" },
+};
+
 interface DialogProps {
   open: boolean;
   onClose: () => void;
@@ -17,6 +23,8 @@ interface DialogProps {
   className?: string;
   children: ReactNode;
   footer?: ReactNode;
+  /** Width of centre dialogs and side drawers. Defaults to "md" (the original sizes). */
+  size?: "md" | "lg" | "xl";
 }
 
 const panelMotion: Record<Variant, { initial: TargetAndTransition; animate: TargetAndTransition; exit: TargetAndTransition }> = {
@@ -33,8 +41,8 @@ const panelMotion: Record<Variant, { initial: TargetAndTransition; animate: Targ
 
 const panelClass: Record<Variant, string> = {
   center:
-    "relative m-auto flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-pop)]",
-  right: "ml-auto flex h-full w-full max-w-[420px] flex-col bg-white shadow-[var(--shadow-pop)]",
+    "relative m-auto flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] flex-col overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-pop)]",
+  right: "ml-auto flex h-full w-full flex-col bg-white shadow-[var(--shadow-pop)]",
   left: "mr-auto flex h-full w-[86%] max-w-[360px] flex-col bg-white shadow-[var(--shadow-pop)]",
   top: "flex w-full flex-col bg-white shadow-[var(--shadow-pop)]",
   "bottom-sheet":
@@ -45,7 +53,7 @@ const panelClass: Record<Variant, string> = {
  * Accessible modal / drawer: traps focus, closes on Escape and backdrop click,
  * locks body scroll and restores focus to the trigger on close.
  */
-export function Dialog({ open, onClose, title, hideTitle, variant = "center", className, children, footer }: DialogProps) {
+export function Dialog({ open, onClose, title, hideTitle, variant = "center", className, children, footer, size = "md" }: DialogProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const onCloseRef = useRef(onClose);
@@ -115,7 +123,13 @@ export function Dialog({ open, onClose, title, hideTitle, variant = "center", cl
             aria-modal="true"
             aria-labelledby={titleId}
             tabIndex={-1}
-            className={cn(panelClass[variant], "z-10 focus:outline-none", className)}
+            className={cn(
+              panelClass[variant],
+              variant === "center" && WIDTH[size].center,
+              variant === "right" && WIDTH[size].right,
+              "z-10 focus:outline-none",
+              className,
+            )}
             initial={m.initial}
             animate={m.animate}
             exit={m.exit}

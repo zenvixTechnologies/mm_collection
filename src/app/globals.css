@@ -274,6 +274,23 @@
   @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-6 text-sm font-semibold tracking-wide transition-all duration-200 select-none disabled:cursor-not-allowed disabled:opacity-50;
 }
 
+/* Compact sizes for dense screens (admin panel). Combine with .btn-* / .field-input. */
+@utility btn-sm {
+  min-height: 2.5rem;
+  padding-inline: 1.125rem;
+  font-size: 13px;
+}
+@utility field-sm {
+  height: 2.5rem;
+  padding-left: 0.875rem;
+  font-size: 14px;
+  /* keep the room selects reserve for their chevron */
+  &:not(select) {
+    padding-right: 0.875rem;
+  }
+  border-radius: 0.625rem;
+}
+
 @utility no-scrollbar {
   scrollbar-width: none;
   &::-webkit-scrollbar {
