@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Clock, Mail, MapPin, Phone } from "lucide-react";
+import { DELIVERY_DISCLAIMER, DELIVERY_ZONES, UNDERGARMENT_RETURN_POLICY, formatDeliveryZone } from "@/lib/policies";
 import { SITE } from "@/lib/utils";
 import { ContactForm } from "@/components/layout/ContactForm";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
@@ -12,8 +13,14 @@ export const metadata: Metadata = {
 };
 
 const FAQ = [
-  ["How long does delivery take?", "2–3 working days within Kerala and 4–7 days elsewhere in India."],
-  ["Can I exchange for a different size?", "Yes — size exchanges are free within 7 days of delivery, subject to stock."],
+  [
+    "How long does delivery take?",
+    `${DELIVERY_ZONES.map((z) => `${z.region}: ${formatDeliveryZone(z)}`).join(" · ")}. ${DELIVERY_DISCLAIMER}`,
+  ],
+  [
+    "Can I exchange for a different size?",
+    `Yes — size exchanges are free within 7 days of delivery, subject to stock. ${UNDERGARMENT_RETURN_POLICY}`,
+  ],
   ["Do you offer Cash on Delivery?", "No — all orders are prepaid online through Razorpay by UPI, Indian credit / debit card or net banking. Shipping charges are applicable."],
   ["Do you ship outside India?", "Not at the moment. We deliver only to addresses within India and accept payments in Indian Rupees (₹) only."],
   ["Can I visit the store?", `Absolutely. We're at ${SITE.address}.`],

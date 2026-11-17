@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, RotateCcw, ShieldCheck, ShoppingBag, Truck, Zap } from "lucide-react";
+import { Check, Info, RotateCcw, ShieldCheck, ShoppingBag, Truck, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Product } from "@/types";
 import { getAudience } from "@/data/audiences";
 import { getCategory } from "@/data/categories";
 import { usePurchase } from "@/hooks/use-purchase";
+import { UNDERGARMENT_RETURN_POLICY, isUndergarment } from "@/lib/policies";
 import { formatPrice } from "@/lib/utils";
 import { useRecentStore } from "@/store/ui-store";
 import { Price } from "@/components/ui/Price";
@@ -25,6 +26,7 @@ export function ProductPurchase({ product }: { product: Product }) {
   const addRecent = useRecentStore((s) => s.add);
   const category = getCategory(product.categoryId);
   const audience = getAudience(product.audienceCategory);
+  const undergarment = isUndergarment(product);
 
   useEffect(() => addRecent(product.id), [addRecent, product.id]);
 
@@ -107,12 +109,24 @@ export function ProductPurchase({ product }: { product: Product }) {
           <Truck size={18} className="text-ink" /> Delivery across India
         </li>
         <li className="flex flex-col items-center gap-1.5 rounded-xl bg-canvas px-2 py-3">
-          <RotateCcw size={18} className="text-ink" /> 7-day easy returns
+          <RotateCcw size={18} className="text-ink" /> {undergarment ? "Non-returnable" : "7-day easy returns"}
         </li>
         <li className="flex flex-col items-center gap-1.5 rounded-xl bg-canvas px-2 py-3">
           <ShieldCheck size={18} className="text-ink" /> Quality checked
         </li>
       </ul>
+
+      {undergarment && (
+        <p className="mt-3 flex items-start gap-2 rounded-xl bg-gold-soft px-4 py-3 text-sm text-ink">
+          <Info size={16} className="mt-0.5 shrink-0 text-gold-dark" aria-hidden />
+          <span>
+            {UNDERGARMENT_RETURN_POLICY}{" "}
+            <Link href="/return-policy" className="text-accent underline underline-offset-2">
+              Return policy
+            </Link>
+          </span>
+        </p>
+      )}
 
       <div className="mt-6">
         <PincodeChecker />

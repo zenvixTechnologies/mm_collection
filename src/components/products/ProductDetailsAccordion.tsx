@@ -6,8 +6,10 @@ import { Minus, Plus } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import type { Product } from "@/types";
 import { getCategory } from "@/data/categories";
+import { DELIVERY_DISCLAIMER, DELIVERY_ZONES, UNDERGARMENT_RETURN_POLICY, formatDeliveryZone, isUndergarment } from "@/lib/policies";
 
 export function ProductDetailsAccordion({ product }: { product: Product }) {
+  const undergarment = isUndergarment(product);
   const items: { id: string; title: string; content: ReactNode }[] = [
     {
       id: "description",
@@ -53,7 +55,12 @@ export function ProductDetailsAccordion({ product }: { product: Product }) {
         <ul className="list-disc space-y-1 pl-5">
           <li>Shipping charges applicable.</li>
           <li>Orders are dispatched within 24–48 hours from our Alappuzha store.</li>
-          <li>Delivery in 2–3 days within Kerala and 4–7 days across India.</li>
+          {DELIVERY_ZONES.map((zone) => (
+            <li key={zone.region}>
+              {zone.region}: {formatDeliveryZone(zone)}.
+            </li>
+          ))}
+          <li>{DELIVERY_DISCLAIMER}</li>
           <li>
             Read our full{" "}
             <Link href="/shipping-policy" className="text-accent underline">
@@ -69,9 +76,18 @@ export function ProductDetailsAccordion({ product }: { product: Product }) {
       title: "Returns & exchanges",
       content: (
         <ul className="list-disc space-y-1 pl-5">
-          <li>Easy returns or size exchanges within 7 days of delivery.</li>
-          <li>Items must be unworn, unwashed and have original tags attached.</li>
-          <li>Innerwear, nightwear and sale items marked “final sale” can&apos;t be returned for hygiene reasons.</li>
+          {undergarment ? (
+            <li>
+              <strong className="text-ink">Non-returnable:</strong> {UNDERGARMENT_RETURN_POLICY}
+            </li>
+          ) : (
+            <>
+              <li>Easy returns or size exchanges within 7 days of delivery.</li>
+              <li>Items must be unworn, unwashed and have original tags attached.</li>
+              <li>Undergarments are non-returnable and non-exchangeable for hygiene and safety reasons.</li>
+              <li>Nightwear and sale items marked “final sale” can&apos;t be returned for hygiene reasons.</li>
+            </>
+          )}
           <li>
             See the{" "}
             <Link href="/return-policy" className="text-accent underline">

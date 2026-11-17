@@ -20,7 +20,7 @@ export const mockStoreSettings: StoreSettings = {
     returnWindowDays: 7,
     exchangeOnly: false,
     returnPolicySummary:
-      "Unused items with original tags can be returned within 7 days of delivery. Innerwear, customised and sale items are not returnable.",
+      "Unused items with original tags can be returned within 7 days of delivery. Undergarments are non-returnable and non-exchangeable for hygiene and safety reasons. Customised and sale items are not returnable.",
     privacyContact: SITE.email,
   },
   notifications: { newOrder: true, lowStock: true, paymentFailed: true, dailySummary: false },
@@ -32,7 +32,7 @@ export const mockStoreSettings: StoreSettings = {
  */
 export const mockShippingSettings: ShippingSettings = {
   chargesNotice: "Shipping Charges Applicable",
-  deliveryEstimate: "Delivered across India in 3–7 working days",
+  deliveryEstimate: "Kerala 3–5, South India 5–7, Rest of India 7–10 business days",
   dispatchTime: "Orders are packed and dispatched within 1–2 working days",
   country: "India",
   couriers: [
