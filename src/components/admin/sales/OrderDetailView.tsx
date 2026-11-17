@@ -76,7 +76,7 @@ export function OrderDetailView({ id }: { id: string }) {
           title="Order not found"
           description={`There's no order with the ID “${id}”.`}
           action={
-            <Link href="/admin/orders" className="btn-outline btn-sm">
+            <Link href="/mm-hub/orders" className="btn-outline btn-sm">
               Back to orders
             </Link>
           }
@@ -92,7 +92,7 @@ export function OrderDetailView({ id }: { id: string }) {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Orders", href: "/admin/orders" }, { label: order.id }]}
+        breadcrumbs={[{ label: "Orders", href: "/mm-hub/orders" }, { label: order.id }]}
         title={`Order ${order.id}`}
         description={
           <span className="inline-flex flex-wrap items-center gap-2">
@@ -229,7 +229,7 @@ export function OrderDetailView({ id }: { id: string }) {
               </span>
             }
             action={
-              <Link href={`/admin/customers/${order.customerId}`} className="text-[13px] font-semibold text-accent hover:underline">
+              <Link href={`/mm-hub/customers/${order.customerId}`} className="text-[13px] font-semibold text-accent hover:underline">
                 Profile
               </Link>
             }
@@ -254,7 +254,7 @@ export function OrderDetailView({ id }: { id: string }) {
               </span>
             }
             action={
-              <Link href={`/admin/payments?q=${order.id}`} className="text-[13px] font-semibold text-accent hover:underline">
+              <Link href={`/mm-hub/payments?q=${order.id}`} className="text-[13px] font-semibold text-accent hover:underline">
                 Details
               </Link>
             }

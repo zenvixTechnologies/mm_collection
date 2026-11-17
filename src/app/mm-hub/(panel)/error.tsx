@@ -16,7 +16,7 @@ export default function AdminError({ error, reset }: { error: Error & { digest?:
         <button type="button" onClick={reset} className="btn-primary btn-sm">
           Try again
         </button>
-        <Link href="/admin" className="btn-outline btn-sm">
+        <Link href="/mm-hub" className="btn-outline btn-sm">
           Dashboard
         </Link>
       </div>

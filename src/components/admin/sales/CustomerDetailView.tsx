@@ -32,7 +32,7 @@ export function CustomerDetailView({ id }: { id: string }) {
           icon={<Users size={24} />}
           title="Customer not found"
           action={
-            <Link href="/admin/customers" className="btn-outline btn-sm">
+            <Link href="/mm-hub/customers" className="btn-outline btn-sm">
               Back to customers
             </Link>
           }
@@ -50,7 +50,7 @@ export function CustomerDetailView({ id }: { id: string }) {
       header: "Order",
       sortValue: (o) => o.id,
       cell: (o) => (
-        <Link href={`/admin/orders/${o.id}`} className="font-semibold whitespace-nowrap hover:text-accent hover:underline">
+        <Link href={`/mm-hub/orders/${o.id}`} className="font-semibold whitespace-nowrap hover:text-accent hover:underline">
           {o.id}
         </Link>
       ),
@@ -65,7 +65,7 @@ export function CustomerDetailView({ id }: { id: string }) {
 
   return (
     <>
-      <PageHeader breadcrumbs={[{ label: "Customers", href: "/admin/customers" }, { label: customer.fullName }]} title="Customer profile" />
+      <PageHeader breadcrumbs={[{ label: "Customers", href: "/mm-hub/customers" }, { label: customer.fullName }]} title="Customer profile" />
 
       <section className="card relative mb-6 overflow-hidden p-5 sm:p-6" aria-label="Profile summary">
         <div className="gold-rule absolute inset-x-0 top-0 opacity-60" aria-hidden />

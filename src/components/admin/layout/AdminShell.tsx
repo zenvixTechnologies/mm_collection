@@ -81,7 +81,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const closeNav = useCallback(() => setNavOpen(false), []);
 
   useEffect(() => {
-    if (hydrated && !user) router.replace(`/admin/login?next=${encodeURIComponent(pathname)}`);
+    if (hydrated && !user) router.replace(`/mm-hub/login?next=${encodeURIComponent(pathname)}`);
   }, [hydrated, user, router, pathname]);
 
   if (!hydrated || !user) return <AdminSplash />;

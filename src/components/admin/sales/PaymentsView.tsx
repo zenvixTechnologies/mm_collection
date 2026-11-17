@@ -74,7 +74,7 @@ function PaymentDetail({ payment, onClose }: { payment: PaymentTransaction; onCl
           [
             "Store order",
             payment.orderId ? (
-              <Link key="so" href={`/admin/orders/${payment.orderId}`} onClick={onClose} className="font-semibold text-accent hover:underline">
+              <Link key="so" href={`/mm-hub/orders/${payment.orderId}`} onClick={onClose} className="font-semibold text-accent hover:underline">
                 {payment.orderId}
               </Link>
             ) : (
@@ -196,7 +196,7 @@ export function PaymentsView() {
       sortValue: (p) => p.orderId ?? "",
       cell: (p) =>
         p.orderId ? (
-          <Link href={`/admin/orders/${p.orderId}`} className="font-medium whitespace-nowrap hover:text-accent hover:underline">
+          <Link href={`/mm-hub/orders/${p.orderId}`} className="font-medium whitespace-nowrap hover:text-accent hover:underline">
             {p.orderId}
           </Link>
         ) : (

@@ -42,15 +42,15 @@ function GlobalSearch() {
       ...orders
         .filter((o) => has(o.id, o.customer.fullName))
         .slice(0, 4)
-        .map((o) => ({ id: `o-${o.id}`, icon: ShoppingBag, title: o.id, sub: `${o.customer.fullName} · ${o.status}`, href: `/admin/orders/${o.id}` })),
+        .map((o) => ({ id: `o-${o.id}`, icon: ShoppingBag, title: o.id, sub: `${o.customer.fullName} · ${o.status}`, href: `/mm-hub/orders/${o.id}` })),
       ...products
         .filter((p) => has(p.name, p.sku))
         .slice(0, 4)
-        .map((p) => ({ id: `p-${p.id}`, icon: Package, title: p.name, sub: p.sku, href: `/admin/products?q=${encodeURIComponent(p.sku)}` })),
+        .map((p) => ({ id: `p-${p.id}`, icon: Package, title: p.name, sub: p.sku, href: `/mm-hub/products?q=${encodeURIComponent(p.sku)}` })),
       ...customers
         .filter((c) => has(c.fullName, c.email, c.mobile))
         .slice(0, 4)
-        .map((c) => ({ id: `c-${c.id}`, icon: Users, title: c.fullName, sub: c.email, href: `/admin/customers/${c.id}` })),
+        .map((c) => ({ id: `c-${c.id}`, icon: Users, title: c.fullName, sub: c.email, href: `/mm-hub/customers/${c.id}` })),
     ];
   }, [q, orders, products, customers]);
 
@@ -247,10 +247,10 @@ function ProfileMenu() {
               <p className="truncate text-xs text-muted">{user.email}</p>
             </div>
             <div className="py-1.5">
-              <Link role="menuitem" href="/admin/settings?tab=account" onClick={close} className={item}>
+              <Link role="menuitem" href="/mm-hub/settings?tab=account" onClick={close} className={item}>
                 <User size={16} className="text-muted" aria-hidden /> My profile
               </Link>
-              <Link role="menuitem" href="/admin/settings" onClick={close} className={item}>
+              <Link role="menuitem" href="/mm-hub/settings" onClick={close} className={item}>
                 <Settings size={16} className="text-muted" aria-hidden /> Store settings
               </Link>
               <Link role="menuitem" href="/" target="_blank" onClick={close} className={item}>
@@ -264,7 +264,7 @@ function ProfileMenu() {
                 onClick={() => {
                   logout();
                   toast.info("Signed out of the admin panel");
-                  router.replace("/admin/login");
+                  router.replace("/mm-hub/login");
                 }}
                 className={cn(item, "text-danger hover:bg-danger-soft")}
               >

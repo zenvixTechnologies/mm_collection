@@ -9,7 +9,7 @@ export default function AdminNotFound() {
       </span>
       <h1 className="font-display text-4xl font-semibold">Page not found</h1>
       <p className="mt-2 text-muted">This admin page doesn&apos;t exist or may have moved.</p>
-      <Link href="/admin" className="btn-primary btn-sm mt-7">
+      <Link href="/mm-hub" className="btn-primary btn-sm mt-7">
         Back to dashboard
       </Link>
     </div>

@@ -149,7 +149,7 @@ export function ShippingView() {
         }
         description={`${inTransit.length} shipments in transit · ${readyToShip} orders waiting to be shipped`}
         action={
-          <Link href="/admin/orders?status=Processing" className="text-[13px] font-semibold text-accent hover:underline">
+          <Link href="/mm-hub/orders?status=Processing" className="text-[13px] font-semibold text-accent hover:underline">
             Orders to ship
           </Link>
         }
@@ -171,7 +171,7 @@ export function ShippingView() {
               {inTransit.map((o) => (
                 <tr key={o.id} className="hover:bg-canvas/70">
                   <td className="px-5 py-3">
-                    <Link href={`/admin/orders/${o.id}`} className="font-semibold hover:text-accent hover:underline">
+                    <Link href={`/mm-hub/orders/${o.id}`} className="font-semibold hover:text-accent hover:underline">
                       {o.id}
                     </Link>
                   </td>
