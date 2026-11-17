@@ -51,7 +51,7 @@ export const SITE = {
   shortName: "M&M",
   tagline: "Everyday elegance for every woman",
   url: "https://mmcollections.in",
-  email: "hello@mmcollections.in",
+  email: "mmcollections.alpy@gmail.com",
   phone: "+91 94973 42612",
   whatsapp: "+91 94973 42612",
   address: "Near Thumpoly Church, Thumpoly P.O, Alappuzha, Kerala 688008",

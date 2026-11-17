@@ -2,21 +2,42 @@
 
 import { CheckCircle2, Loader2, MapPin, XCircle } from "lucide-react";
 import { useState } from "react";
+import { DELIVERY_DISCLAIMER, DELIVERY_ZONES } from "@/lib/policies";
 
 type Result = { ok: true; message: string } | { ok: false; message: string };
 
+const [KERALA, SOUTH_INDIA, REST_OF_INDIA] = DELIVERY_ZONES;
+
+/** Skips Saturdays and Sundays, since delivery timelines are quoted in business days. */
+function addBusinessDays(start: Date, days: number) {
+  const d = new Date(start);
+  let added = 0;
+  while (added < days) {
+    d.setDate(d.getDate() + 1);
+    if (d.getDay() !== 0 && d.getDay() !== 6) added++;
+  }
+  return d;
+}
+
 /**
  * DEMO delivery estimate — uses simple PIN code prefix rules, not a real courier API.
- * Kerala (67–69) ships fastest from our Alappuzha store; other Indian PINs take longer.
+ * Kerala (67–69) ships fastest from our Alappuzha store; South India is Telangana / Andhra Pradesh (50–53),
+ * Karnataka (56–59) and Tamil Nadu / Puducherry (60–64); everywhere else is Rest of India.
  */
 function estimate(pin: string): Result {
   const n = Number(pin);
   if (!/^[1-9]\d{5}$/.test(pin)) return { ok: false, message: "Enter a valid 6-digit PIN code." };
   if (pin.startsWith("99") || n < 110000) return { ok: false, message: "Sorry, we don't deliver to this PIN code yet." };
   const prefix = Number(pin.slice(0, 2));
-  const days = prefix >= 67 && prefix <= 69 ? [2, 3] : prefix >= 56 && prefix <= 64 ? [3, 5] : [4, 7];
-  const from = new Date(Date.now() + days[0] * 86400000);
-  const to = new Date(Date.now() + days[1] * 86400000);
+  const zone =
+    prefix >= 67 && prefix <= 69
+      ? KERALA
+      : (prefix >= 50 && prefix <= 53) || (prefix >= 56 && prefix <= 64)
+        ? SOUTH_INDIA
+        : REST_OF_INDIA;
+  const today = new Date();
+  const from = addBusinessDays(today, zone.minDays);
+  const to = addBusinessDays(today, zone.maxDays);
   const fmt = (d: Date) => d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
   return { ok: true, message: `Estimated delivery: ${fmt(from)} – ${fmt(to)}` };
 }
@@ -68,6 +89,7 @@ export function PincodeChecker() {
                 <CheckCircle2 size={14} /> {result.message}
               </p>
               <p className="pl-5 text-muted">Shipping Charges Applicable · Prepaid orders (UPI / card / net banking)</p>
+              <p className="pl-5 text-muted">{DELIVERY_DISCLAIMER}</p>
             </div>
           ) : (
             <p className="flex items-center gap-1.5 text-danger">

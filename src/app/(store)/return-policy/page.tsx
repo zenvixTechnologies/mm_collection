@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PolicyPage } from "@/components/layout/PolicyPage";
+import { UNDERGARMENT_RETURN_POLICY } from "@/lib/policies";
 
 export const metadata: Metadata = {
   title: "Return & Refund Policy",
@@ -10,18 +11,28 @@ export const metadata: Metadata = {
 
 export default function ReturnPolicyPage() {
   return (
-    <PolicyPage title="Return & Refund Policy" updated="12 November 2026" current="/return-policy">
+    <PolicyPage title="Return & Refund Policy" updated="17 November 2026" current="/return-policy">
       <p className="mt-6">We want you to love what you buy. If something isn&apos;t right, here&apos;s how we can help.</p>
+      <div className="mt-6 rounded-2xl border border-line bg-canvas p-5">
+        <h2 className="!mt-0">Undergarments are non-returnable</h2>
+        <p>{UNDERGARMENT_RETURN_POLICY}</p>
+        <p className="!mt-2">
+          This includes bras, panties, briefs, boxers, lingerie, shapewear and other innerwear. They cannot be returned or
+          exchanged for another size, so please check the size guide before ordering. If an undergarment arrives damaged or incorrect,
+          see <a href="#damaged-or-incorrect-items">damaged or incorrect items</a> below.
+        </p>
+      </div>
       <h2>Return window</h2>
       <p>You can request a return or size exchange within 7 days of delivery.</p>
       <h2>Eligibility</h2>
       <ul>
         <li>Items must be unused, unwashed and in their original condition with all tags attached.</li>
-        <li>Nightwear, innerwear and items marked “final sale” cannot be returned for hygiene reasons.</li>
+        <li>Undergarments cannot be returned or exchanged (see above).</li>
+        <li>Nightwear and items marked “final sale” cannot be returned for hygiene reasons.</li>
         <li>Sarees must be returned with the unstitched blouse piece intact.</li>
       </ul>
       <h2>Size exchanges</h2>
-      <p>Exchanges for a different size of the same product are free, subject to availability. If your size is out of stock we&apos;ll issue a refund instead.</p>
+      <p>Exchanges for a different size of the same product are free, subject to availability (undergarments excluded). If your size is out of stock we&apos;ll issue a refund instead.</p>
       <h2>How to request a return</h2>
       <ul>
         <li>
@@ -38,7 +49,7 @@ export default function ReturnPolicyPage() {
         </li>
         <li>The shipping charge is non-refundable unless the item was damaged or incorrect.</li>
       </ul>
-      <h2>Damaged or incorrect items</h2>
+      <h2 id="damaged-or-incorrect-items">Damaged or incorrect items</h2>
       <p>
         If you receive a damaged or wrong item, contact us within 48 hours of delivery with photos (or an unboxing video — see below) and
         we&apos;ll replace it or refund you in full.
