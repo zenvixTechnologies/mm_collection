@@ -24,12 +24,14 @@ interface LogoProps {
   /** Footer sits on a dark background: place the emblem on a white disc. */
   onDark?: boolean;
   priority?: boolean;
+  /** Where the logo links to (the admin panel links to its dashboard). */
+  href?: string;
 }
 
-export function Logo({ className, size = "header", withWordmark = false, onDark = false, priority = false }: LogoProps) {
+export function Logo({ className, size = "header", withWordmark = false, onDark = false, priority = false, href = "/" }: LogoProps) {
   const s = SIZES[size];
   return (
-    <Link href="/" aria-label="M&M COLLECTIONS — home" className={cn("group inline-flex items-center gap-2.5", className)}>
+    <Link href={href} aria-label="M&M COLLECTIONS — home" className={cn("group inline-flex items-center gap-2.5", className)}>
       <span className={cn("relative block shrink-0 rounded-full", onDark && "bg-white p-1.5 shadow-[0_4px_24px_rgb(0_0_0/0.4)] ring-2 ring-gold/70")}>
         <Image
           src={s.src}

@@ -1,19 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Cormorant_Garamond, DM_Sans } from "next/font/google";
 import { Suspense } from "react";
-import { AnnouncementBar } from "@/components/layout/AnnouncementBar";
-import { AudienceBar } from "@/components/layout/AudienceBar";
-import { CartDrawer } from "@/components/layout/CartDrawer";
-import { Footer } from "@/components/layout/Footer";
-import { Header } from "@/components/layout/Header";
-import { IntroGate } from "@/components/home/IntroGate";
-import { MobileMenu } from "@/components/layout/MobileMenu";
 import { Providers } from "@/components/layout/Providers";
 import { RouteProgress } from "@/components/layout/RouteProgress";
-import { SearchOverlay } from "@/components/layout/SearchOverlay";
-import { QuickAddModal } from "@/components/products/QuickAddModal";
 import { Toaster } from "@/components/ui/Toaster";
-import { AudienceTracker } from "@/store/audience-store";
 import { SITE } from "@/lib/utils";
 import "./globals.css";
 
@@ -57,30 +47,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en-IN" className={`${dmSans.variable} ${cormorant.variable}`} suppressHydrationWarning>
       <body>
-        {/* Brand intro: plays once per session, only when landing on the homepage */}
-        <IntroGate />
         <Providers>
           <Suspense fallback={null}>
             <RouteProgress />
           </Suspense>
-          <a
-            href="#main"
-            className="sr-only z-[100] rounded-full bg-ink px-4 py-2 text-white focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
-          >
-            Skip to content
-          </a>
-          <AnnouncementBar />
-          <Header />
-          <AudienceBar />
-          <AudienceTracker />
-          <main id="main" className="min-h-[60vh]">
-            {children}
-          </main>
-          <Footer />
-          <CartDrawer />
-          <SearchOverlay />
-          <MobileMenu />
-          <QuickAddModal />
+          {/* Storefront chrome lives in app/(store)/layout.tsx; the admin panel has its own in app/admin */}
+          {children}
           <Toaster />
         </Providers>
       </body>
