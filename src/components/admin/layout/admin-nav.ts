@@ -27,40 +27,40 @@ export interface AdminNavGroup {
 }
 
 export const ADMIN_NAV: AdminNavGroup[] = [
-  { label: "Overview", items: [{ href: "/admin", label: "Dashboard", icon: LayoutDashboard }] },
+  { label: "Overview", items: [{ href: "/mm-hub", label: "Dashboard", icon: LayoutDashboard }] },
   {
     label: "Catalogue",
     items: [
-      { href: "/admin/products", label: "Products", icon: Shirt },
-      { href: "/admin/categories", label: "Categories", icon: FolderTree },
-      { href: "/admin/inventory", label: "Inventory", icon: Boxes, badge: "lowStock" },
+      { href: "/mm-hub/products", label: "Products", icon: Shirt },
+      { href: "/mm-hub/categories", label: "Categories", icon: FolderTree },
+      { href: "/mm-hub/inventory", label: "Inventory", icon: Boxes, badge: "lowStock" },
     ],
   },
   {
     label: "Sales",
     items: [
-      { href: "/admin/orders", label: "Orders", icon: ShoppingBag, badge: "newOrders" },
-      { href: "/admin/customers", label: "Customers", icon: Users },
-      { href: "/admin/payments", label: "Payments", icon: CreditCard },
+      { href: "/mm-hub/orders", label: "Orders", icon: ShoppingBag, badge: "newOrders" },
+      { href: "/mm-hub/customers", label: "Customers", icon: Users },
+      { href: "/mm-hub/payments", label: "Payments", icon: CreditCard },
     ],
   },
   {
     label: "Marketing",
     items: [
-      { href: "/admin/coupons", label: "Coupons & Offers", icon: BadgePercent },
-      { href: "/admin/homepage", label: "Homepage", icon: LayoutTemplate },
+      { href: "/mm-hub/coupons", label: "Coupons & Offers", icon: BadgePercent },
+      { href: "/mm-hub/homepage", label: "Homepage", icon: LayoutTemplate },
     ],
   },
   {
     label: "Store",
     items: [
-      { href: "/admin/shipping", label: "Shipping", icon: Truck },
-      { href: "/admin/settings", label: "Settings", icon: Settings },
+      { href: "/mm-hub/shipping", label: "Shipping", icon: Truck },
+      { href: "/mm-hub/settings", label: "Settings", icon: Settings },
     ],
   },
 ];
 
 export function isAdminPathActive(pathname: string, href: string) {
-  if (href === "/admin") return pathname === "/admin";
+  if (href === "/mm-hub") return pathname === "/mm-hub";
   return pathname === href || pathname.startsWith(`${href}/`);
 }

@@ -78,7 +78,7 @@ export function CustomersView() {
         <div className="flex min-w-[200px] items-center gap-3">
           <Avatar name={c.fullName} />
           <div className="min-w-0">
-            <Link href={`/admin/customers/${c.id}`} className="font-semibold hover:text-accent hover:underline">
+            <Link href={`/mm-hub/customers/${c.id}`} className="font-semibold hover:text-accent hover:underline">
               {c.fullName}
             </Link>
             <p className="truncate text-xs text-muted">{c.email}</p>

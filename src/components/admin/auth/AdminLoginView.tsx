@@ -23,7 +23,7 @@ import { toast } from "@/store/ui-store";
 
 /** Only allow redirects back into the admin panel. */
 function safeNext(next: string | null) {
-  return next && next.startsWith("/admin") && !next.startsWith("/admin/login") ? next : "/admin";
+  return next && next.startsWith("/mm-hub") && !next.startsWith("/mm-hub/login") ? next : "/mm-hub";
 }
 
 const ease = [0.22, 1, 0.36, 1] as const;

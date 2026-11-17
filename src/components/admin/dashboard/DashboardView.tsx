@@ -92,7 +92,7 @@ export function DashboardView() {
         actions={
           <>
             <Segmented label="Date range" items={RANGES} value={range} onChange={setRange} />
-            <Link href="/admin/products?new=1" className="btn-primary btn-sm">
+            <Link href="/mm-hub/products?new=1" className="btn-primary btn-sm">
               <Plus size={16} aria-hidden /> Add product
             </Link>
           </>
@@ -145,7 +145,7 @@ export function DashboardView() {
           title="Order pipeline"
           description="Open orders by status, all time"
           action={
-            <Link href="/admin/orders" className="text-[13px] font-semibold text-accent hover:underline">
+            <Link href="/mm-hub/orders" className="text-[13px] font-semibold text-accent hover:underline">
               Manage
             </Link>
           }
@@ -167,7 +167,7 @@ export function DashboardView() {
           title="Recent orders"
           flush
           action={
-            <Link href="/admin/orders" className="inline-flex items-center gap-1 text-[13px] font-semibold text-accent hover:underline">
+            <Link href="/mm-hub/orders" className="inline-flex items-center gap-1 text-[13px] font-semibold text-accent hover:underline">
               View all <ArrowRight size={14} aria-hidden />
             </Link>
           }
@@ -188,7 +188,7 @@ export function DashboardView() {
                 {recent.map((o) => (
                   <tr key={o.id} className="hover:bg-canvas/70">
                     <td className="px-5 py-3">
-                      <Link href={`/admin/orders/${o.id}`} className="font-semibold hover:text-accent hover:underline">
+                      <Link href={`/mm-hub/orders/${o.id}`} className="font-semibold hover:text-accent hover:underline">
                         {o.id}
                       </Link>
                       <p className="text-xs text-muted sm:hidden">{o.customer.fullName}</p>
@@ -249,7 +249,7 @@ export function DashboardView() {
           description="Active products at or below their low-stock level"
           flush
           action={
-            <Link href="/admin/inventory?filter=low" className="text-[13px] font-semibold text-accent hover:underline">
+            <Link href="/mm-hub/inventory?filter=low" className="text-[13px] font-semibold text-accent hover:underline">
               Inventory
             </Link>
           }

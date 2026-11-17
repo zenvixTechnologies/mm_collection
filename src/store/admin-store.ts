@@ -141,7 +141,7 @@ export const useAdminStore = create<AdminData & AdminActions>()((set, get) => {
       const saved = { ...product, updatedAt: now() };
       set({
         products: upsert(get().products, saved),
-        activity: log(exists ? "updated product" : "added product", product.name, "/admin/products"),
+        activity: log(exists ? "updated product" : "added product", product.name, "/mm-hub/products"),
       });
     },
     deleteProducts: (ids) => {
@@ -149,13 +149,13 @@ export const useAdminStore = create<AdminData & AdminActions>()((set, get) => {
       set({
         products: get().products.filter((p) => !ids.includes(p.id)),
         featuredProductIds: get().featuredProductIds.filter((id) => !ids.includes(id)),
-        activity: log("deleted", names.length === 1 ? names[0] : `${names.length} products`, "/admin/products"),
+        activity: log("deleted", names.length === 1 ? names[0] : `${names.length} products`, "/mm-hub/products"),
       });
     },
     setProductStatus: (ids, status) =>
       set({
         products: get().products.map((p) => (ids.includes(p.id) ? { ...p, status, updatedAt: now() } : p)),
-        activity: log(`set ${ids.length} product${ids.length > 1 ? "s" : ""} to`, status, "/admin/products"),
+        activity: log(`set ${ids.length} product${ids.length > 1 ? "s" : ""} to`, status, "/mm-hub/products"),
       }),
     adjustStock: (productId, change, reason) => {
       const p = get().products.find((x) => x.id === productId);
@@ -177,7 +177,7 @@ export const useAdminStore = create<AdminData & AdminActions>()((set, get) => {
           },
           ...get().stockAdjustments,
         ],
-        activity: log(`adjusted stock (${change > 0 ? "+" : ""}${change}) for`, p.name, "/admin/inventory"),
+        activity: log(`adjusted stock (${change > 0 ? "+" : ""}${change}) for`, p.name, "/mm-hub/inventory"),
       });
     },
     setLowStockThreshold: (productId, threshold) =>
@@ -189,12 +189,12 @@ export const useAdminStore = create<AdminData & AdminActions>()((set, get) => {
         categories: exists
           ? get().categories.map((c) => (c.id === category.id ? category : c))
           : [...get().categories, { ...category, sortOrder: get().categories.length }],
-        activity: log(exists ? "updated category" : "added category", category.name, "/admin/categories"),
+        activity: log(exists ? "updated category" : "added category", category.name, "/mm-hub/categories"),
       });
     },
     deleteCategory: (id) => {
       const c = get().categories.find((x) => x.id === id);
-      set({ categories: get().categories.filter((x) => x.id !== id), activity: log("deleted category", c?.name ?? id, "/admin/categories") });
+      set({ categories: get().categories.filter((x) => x.id !== id), activity: log("deleted category", c?.name ?? id, "/mm-hub/categories") });
     },
     moveCategory: (id, direction) => {
       const target = get().categories.find((c) => c.id === id);
@@ -223,12 +223,12 @@ export const useAdminStore = create<AdminData & AdminActions>()((set, get) => {
               }
             : o,
         ),
-        activity: log(`marked ${status.toLowerCase()}`, id, `/admin/orders/${id}`),
+        activity: log(`marked ${status.toLowerCase()}`, id, `/mm-hub/orders/${id}`),
       }),
     setTracking: (id, tracking) =>
       set({
         orders: get().orders.map((o) => (o.id === id ? { ...o, tracking } : o)),
-        activity: log("added tracking to", id, `/admin/orders/${id}`),
+        activity: log("added tracking to", id, `/mm-hub/orders/${id}`),
       }),
     addOrderNote: (id, text) =>
       set({
@@ -243,7 +243,7 @@ export const useAdminStore = create<AdminData & AdminActions>()((set, get) => {
       const c = get().customers.find((x) => x.id === id);
       set({
         customers: get().customers.map((x) => (x.id === id ? { ...x, ...patch } : x)),
-        activity: patch.status && c ? log(patch.status === "blocked" ? "blocked customer" : "unblocked customer", c.fullName, `/admin/customers/${id}`) : get().activity,
+        activity: patch.status && c ? log(patch.status === "blocked" ? "blocked customer" : "unblocked customer", c.fullName, `/mm-hub/customers/${id}`) : get().activity,
       });
     },
 
@@ -255,36 +255,36 @@ export const useAdminStore = create<AdminData & AdminActions>()((set, get) => {
       set({
         payments: get().payments.map((x) => (x.id === id ? { ...x, refundedAmount, status } : x)),
         orders: get().orders.map((o) => (o.id === p.orderId ? { ...o, paymentStatus: status } : o)),
-        activity: log("recorded a demo refund for", p.orderId ?? p.razorpayPaymentId, "/admin/payments"),
+        activity: log("recorded a demo refund for", p.orderId ?? p.razorpayPaymentId, "/mm-hub/payments"),
       });
     },
 
     saveCoupon: (coupon) => {
       const exists = get().coupons.some((c) => c.id === coupon.id);
-      set({ coupons: upsert(get().coupons, coupon), activity: log(exists ? "updated coupon" : "created coupon", coupon.code, "/admin/coupons") });
+      set({ coupons: upsert(get().coupons, coupon), activity: log(exists ? "updated coupon" : "created coupon", coupon.code, "/mm-hub/coupons") });
     },
     deleteCoupon: (id) => {
       const c = get().coupons.find((x) => x.id === id);
-      set({ coupons: get().coupons.filter((x) => x.id !== id), activity: log("deleted coupon", c?.code ?? id, "/admin/coupons") });
+      set({ coupons: get().coupons.filter((x) => x.id !== id), activity: log("deleted coupon", c?.code ?? id, "/mm-hub/coupons") });
     },
-    saveOffer: (offer) => set({ offers: upsert(get().offers, offer), activity: log("saved offer", offer.title, "/admin/coupons?tab=offers") }),
+    saveOffer: (offer) => set({ offers: upsert(get().offers, offer), activity: log("saved offer", offer.title, "/mm-hub/coupons?tab=offers") }),
     deleteOffer: (id) => set({ offers: get().offers.filter((x) => x.id !== id) }),
 
     saveBanner: (banner) => {
       const exists = get().banners.some((b) => b.id === banner.id);
       set({
         banners: exists ? get().banners.map((b) => (b.id === banner.id ? banner : b)) : [...get().banners, banner],
-        activity: log(exists ? "updated banner" : "added banner", banner.title, "/admin/homepage"),
+        activity: log(exists ? "updated banner" : "added banner", banner.title, "/mm-hub/homepage"),
       });
     },
     deleteBanner: (id) => set({ banners: get().banners.filter((b) => b.id !== id) }),
     setFeaturedProducts: (featuredProductIds) =>
-      set({ featuredProductIds, activity: log("updated featured products", `${featuredProductIds.length} products`, "/admin/homepage") }),
+      set({ featuredProductIds, activity: log("updated featured products", `${featuredProductIds.length} products`, "/mm-hub/homepage") }),
     toggleSection: (id) =>
       set({ homepageSections: get().homepageSections.map((s) => (s.id === id ? { ...s, visible: !s.visible } : s)) }),
 
-    updateShipping: (patch) => set({ shipping: { ...get().shipping, ...patch }, activity: log("updated", "shipping settings", "/admin/shipping") }),
-    updateSettings: (patch) => set({ settings: { ...get().settings, ...patch }, activity: log("updated", "store settings", "/admin/settings") }),
+    updateShipping: (patch) => set({ shipping: { ...get().shipping, ...patch }, activity: log("updated", "shipping settings", "/mm-hub/shipping") }),
+    updateSettings: (patch) => set({ settings: { ...get().settings, ...patch }, activity: log("updated", "store settings", "/mm-hub/settings") }),
 
     markNotificationRead: (id) => set({ notifications: get().notifications.map((n) => (n.id === id ? { ...n, read: true } : n)) }),
     markAllNotificationsRead: () => set({ notifications: get().notifications.map((n) => ({ ...n, read: true })) }),

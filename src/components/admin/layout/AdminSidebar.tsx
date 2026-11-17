@@ -23,7 +23,7 @@ export function AdminSidebarContent({ onNavigate }: { onNavigate?: () => void })
   return (
     <div className="flex h-full flex-col bg-royal text-white">
       <div className="relative flex items-center gap-3 px-5 pt-5 pb-5">
-        <Logo onDark href="/admin" className="[&_img]:h-10 [&_img]:w-10" />
+        <Logo onDark href="/mm-hub" className="[&_img]:h-10 [&_img]:w-10" />
         <div className="leading-none">
           <p className="font-display text-[22px] font-bold tracking-[0.03em] text-white">
             M<span className="text-gold-gradient">&amp;</span>M

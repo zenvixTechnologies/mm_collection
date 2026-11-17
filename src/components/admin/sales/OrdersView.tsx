@@ -56,7 +56,7 @@ export function OrdersView() {
       sortValue: (o) => o.id,
       cell: (o) => (
         <div className="whitespace-nowrap">
-          <Link href={`/admin/orders/${o.id}`} className="font-semibold hover:text-accent hover:underline">
+          <Link href={`/mm-hub/orders/${o.id}`} className="font-semibold hover:text-accent hover:underline">
             {o.id}
           </Link>
           <p className="text-xs text-muted">
@@ -78,7 +78,7 @@ export function OrdersView() {
       sortValue: (o) => o.customer.fullName,
       cell: (o) => (
         <div className="min-w-[140px]">
-          <Link href={`/admin/customers/${o.customerId}`} className="font-medium hover:underline">
+          <Link href={`/mm-hub/customers/${o.customerId}`} className="font-medium hover:underline">
             {o.customer.fullName}
           </Link>
           <p className="text-xs text-muted">
@@ -113,7 +113,7 @@ export function OrdersView() {
       align: "right",
       className: "w-10",
       cell: (o) => (
-        <Link href={`/admin/orders/${o.id}`} className="icon-btn h-9 w-9 text-muted" aria-label={`Open order ${o.id}`}>
+        <Link href={`/mm-hub/orders/${o.id}`} className="icon-btn h-9 w-9 text-muted" aria-label={`Open order ${o.id}`}>
           <ChevronRight size={17} />
         </Link>
       ),

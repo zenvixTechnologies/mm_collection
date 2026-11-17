@@ -9,7 +9,7 @@ export interface AdminCrumb {
 }
 
 export function AdminBreadcrumbs({ items }: { items: AdminCrumb[] }) {
-  const all: AdminCrumb[] = [{ label: "Dashboard", href: "/admin" }, ...items];
+  const all: AdminCrumb[] = [{ label: "Dashboard", href: "/mm-hub" }, ...items];
   return (
     <nav aria-label="Breadcrumb" className="text-[13px] text-muted">
       <ol className="flex flex-wrap items-center gap-1">
