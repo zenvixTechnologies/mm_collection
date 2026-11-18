@@ -6,6 +6,7 @@ import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
 import { ProductImage } from "@/components/ui/ProductImage";
+import { ColourInfoButton } from "./ColourDisclaimer";
 
 const VIEW_LABELS = ["Front view", "Detail close-up", "Fabric close-up", "Additional view"];
 
@@ -44,7 +45,8 @@ export function ProductGallery({ images, name }: { images: string[]; name: strin
         ))}
       </ul>
 
-      <div>
+      {/* Positioned so the colour-info button can sit over the photo without triggering zoom or the lightbox. */}
+      <div className="relative">
         <div
           className="group relative aspect-[4/5] cursor-zoom-in overflow-hidden rounded-2xl bg-sand"
           onMouseMove={onMove}
@@ -116,6 +118,7 @@ export function ProductGallery({ images, name }: { images: string[]; name: strin
             ))}
           </div>
         </div>
+        <ColourInfoButton />
         <p className="sr-only" aria-live="polite">
           Image {index + 1} of {images.length}
         </p>

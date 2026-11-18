@@ -10,6 +10,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/women",
     "/men",
     "/kids",
+    "/home-living",
     "/shop",
     "/categories",
     "/new-arrivals",

@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { useAdminSession, useAdminStore } from "@/store/admin-store";
 import { toast } from "@/store/ui-store";
 import { timeAgo } from "../ui/format";
-import { useDismiss } from "./use-dismiss";
+import { useDismiss } from "@/hooks/use-dismiss";
 
 const popMotion = {
   initial: { opacity: 0, y: 6, scale: 0.98 },

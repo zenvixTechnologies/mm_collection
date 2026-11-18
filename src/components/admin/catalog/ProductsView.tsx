@@ -17,7 +17,7 @@ import { downloadCsv } from "../ui/csv";
 import { DataTable, TableEmpty, type Column } from "../ui/DataTable";
 import { PageHeader } from "../ui/PageHeader";
 import { FilterSelect, SearchInput, Tabs, Toolbar } from "../ui/Toolbar";
-import { categoryLabel } from "./catalog-helpers";
+import { AUDIENCE_OPTIONS, audienceLabel, categoryLabel } from "./catalog-helpers";
 import { ProductFormDrawer } from "./ProductFormDrawer";
 
 type StatusTab = "all" | ProductStatus;
@@ -109,7 +109,7 @@ export function ProductsView() {
         return (
           <span className="whitespace-nowrap">
             {c ? categoryLabel(c) : "—"}
-            <span className="block text-xs text-muted capitalize">{p.audienceCategory}</span>
+            <span className="block text-xs text-muted">{audienceLabel(p.audienceCategory)}</span>
           </span>
         );
       },
@@ -185,8 +185,8 @@ export function ProductsView() {
               onClick={() => {
                 downloadCsv(
                   "mm-products.csv",
-                  ["SKU", "Name", "Audience", "Category", "MRP", "Price", "Stock", "Status"],
-                  filtered.map((p) => [p.sku, p.name, p.audienceCategory, catById.get(p.categoryId)?.name, p.originalPrice, p.price, p.stock, p.status]),
+                  ["SKU", "Name", "Main category", "Sub-category", "MRP", "Price", "Stock", "Status"],
+                  filtered.map((p) => [p.sku, p.name, audienceLabel(p.audienceCategory), catById.get(p.categoryId)?.name, p.originalPrice, p.price, p.stock, p.status]),
                 );
                 toast.success(`Exported ${filtered.length} products`);
               }}
@@ -221,24 +221,19 @@ export function ProductsView() {
           <SearchInput value={q} onChange={setQ} placeholder="Search by name or SKU" label="Search products" className="sm:max-w-xs sm:flex-1" />
           <div className="grid grid-cols-2 gap-2 sm:flex">
             <FilterSelect
-              label="Audience"
+              label="Main category"
               value={audience}
               onChange={(v) => {
                 setAudience(v);
                 setCategory("all");
               }}
-              options={[
-                { value: "all", label: "All audiences" },
-                { value: "women", label: "Women" },
-                { value: "men", label: "Men" },
-                { value: "kids", label: "Kids" },
-              ]}
+              options={[{ value: "all", label: "All main categories" }, ...AUDIENCE_OPTIONS]}
             />
             <FilterSelect
-              label="Category"
+              label="Sub-category"
               value={category}
               onChange={setCategory}
-              options={[{ value: "all", label: "All categories" }, ...audienceCats.map((c) => ({ value: c.id, label: categoryLabel(c) }))]}
+              options={[{ value: "all", label: "All sub-categories" }, ...audienceCats.map((c) => ({ value: c.id, label: categoryLabel(c) }))]}
             />
             <FilterSelect
               className="col-span-2 sm:col-auto"

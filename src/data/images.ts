@@ -118,6 +118,12 @@ export const IMG = {
   boyBlueKurta: "1774438462747-456631a0f0a4",
   toddlerKurta: "1793984490614-3a94aea1cb36",
   girlFestiveTop: "1774437898386-ccb4bf8ab61d",
+  // ---------- Home & Living ----------
+  whiteMadeBed: "1762199904138-d163fe89540a",
+  stripedBedding: "1638878468165-a974415fed4f",
+  velvetPillowStack: "1559051668-9024c9b5e84b",
+  printedCushionStack: "1575277340599-43db25b63b6f",
+  foldedBlankets: "1734553529922-bc020a21643b",
   // Editorial
   rackTops: "1490481651871-ab68de25d43d",
   boutique: "1445205170230-053b83016050",

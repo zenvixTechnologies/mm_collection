@@ -7,7 +7,7 @@ import { AudienceSwitcher } from "./AudienceSwitcher";
 const HIDDEN_ON = ["/checkout", "/order-success"];
 
 /**
- * Compact Women / Men / Kids selector for phones and tablets, just below the header.
+ * Compact Women / Men / Kids / Home & Living selector for phones and tablets, just below the header.
  * It scrolls away with the page so the sticky header (and sticky shop toolbars) stay the same height.
  */
 export function AudienceBar() {

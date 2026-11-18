@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { AudienceInfo } from "@/data/audiences";
+import { countLabel, type AudienceInfo } from "@/data/audiences";
 import { ProductImage } from "@/components/ui/ProductImage";
 
 interface AudienceHeroProps {
@@ -14,7 +14,7 @@ interface AudienceHeroProps {
   image?: string;
 }
 
-/** Banner at the top of the Women / Men / Kids collection and sub-category pages. */
+/** Banner at the top of the Women / Men / Kids / Home & Living collection and sub-category pages. */
 export function AudienceHero({ info, productCount, eyebrow, title, description, image }: AudienceHeroProps) {
   return (
     <motion.header
@@ -29,7 +29,7 @@ export function AudienceHero({ info, productCount, eyebrow, title, description, 
         <h1 className="mt-2 font-display text-4xl font-semibold sm:text-5xl">{title ?? info.title}</h1>
         <p className="mt-3 max-w-md text-muted">{description ?? info.tagline}</p>
         <p className="mt-5 text-sm font-medium text-ink">
-          {productCount} {productCount === 1 ? "style" : "styles"}
+          {productCount ? countLabel(productCount, info.id) : "New collection — products arriving soon"}
         </p>
       </div>
       <div className="relative order-1 h-56 overflow-hidden sm:h-72 md:order-2 md:h-auto md:min-h-[300px]">

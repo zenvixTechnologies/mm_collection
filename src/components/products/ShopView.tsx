@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Search, SearchX, SlidersHorizontal, X } from "lucide-react";
+import { PackageOpen, Search, SearchX, SlidersHorizontal, X } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import type { Audience, Product } from "@/types";
 import { AUDIENCES, getAudience } from "@/data/audiences";
@@ -64,7 +64,9 @@ export function ShopView({
   const [sort, setSort] = useState<SortValue>(isSortValue(initialSort) ? initialSort : "featured");
   const [filters, setFilters] = useState<Filters>(() => {
     const cat = categories.find((c) => c.id === initialCategory);
-    const aud = audience ? undefined : (cat?.audience ?? initialAudience);
+    const wanted = audience ? undefined : (cat?.audience ?? initialAudience);
+    // Only pre-select an audience this listing actually has (e.g. no Home & Living new arrivals yet).
+    const aud = wanted && products.some((p) => p.audienceCategory === wanted) ? wanted : undefined;
     return {
       ...EMPTY_FILTERS,
       audiences: aud ? [aud] : [],
@@ -78,7 +80,7 @@ export function ShopView({
   const [loadingMore, setLoadingMore] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  // Women / Men / Kids tabs only appear when the listing actually mixes audiences.
+  // Women / Men / Kids / Home & Living tabs only appear when the listing actually mixes audiences.
   const audiencesHere = useMemo(
     () => AUDIENCES.filter((a) => products.some((p) => p.audienceCategory === a.id)),
     [products],
@@ -215,138 +217,152 @@ export function ShopView({
         </nav>
       )}
 
-      <div className="lg:grid lg:grid-cols-[250px_1fr] lg:gap-10">
-        {/* Desktop filters */}
-        <aside className="hidden lg:block" aria-label="Product filters">
-          <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto pr-2">
-            <div className="flex items-center justify-between border-b border-line pb-3">
-              <h2 className="text-base font-semibold">Filters</h2>
-              {activeCount > 0 && (
-                <button type="button" onClick={() => update(EMPTY_FILTERS)} className="text-sm text-accent hover:underline">
-                  Clear all
-                </button>
-              )}
-            </div>
-            <FilterPanel filters={filters} onChange={update} source={panelSource} hideCategory={!!lockedCategory} />
-          </div>
-        </aside>
-
-        <section aria-labelledby="results-heading">
-          {searchable && (
-            <form role="search" className="relative mb-4" onSubmit={(e) => e.preventDefault()}>
-              <label htmlFor="shop-search" className="sr-only">
-                Search in {title}
-              </label>
-              <Search size={17} className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-muted" />
-              <input
-                id="shop-search"
-                type="search"
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setVisible(PAGE_SIZE);
-                }}
-                placeholder={`Search in ${title}…`}
-                autoComplete="off"
-                className="field-input h-12 rounded-full pr-4 pl-11 text-[15px]"
-              />
-            </form>
-          )}
-
-          {/* Toolbar */}
-          <div className="sticky top-16 z-20 -mx-4 mb-5 flex items-center justify-between gap-3 border-b border-line bg-white/95 px-4 py-3 backdrop-blur lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0 lg:pt-0 lg:backdrop-blur-none">
-            <p id="results-heading" className="text-sm text-muted" aria-live="polite">
-              <strong className="text-ink">{results.length}</strong> {results.length === 1 ? "product" : "products"}
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setDrawerOpen(true)}
-                className="flex h-11 items-center gap-2 rounded-full border border-line px-4 text-sm font-medium hover:border-ink lg:hidden"
-              >
-                <SlidersHorizontal size={15} />
-                Filter
+      {products.length === 0 ? (
+        // A brand-new collection or category with nothing published yet — not a "no matches" state.
+        <div className="flex flex-col items-center rounded-2xl bg-canvas px-6 py-16 text-center">
+          <PackageOpen size={36} className="text-accent" aria-hidden />
+          <h2 className="mt-4 font-display text-2xl font-semibold sm:text-3xl">New products arriving soon</h2>
+          <p className="mt-2 max-w-md text-sm text-muted">
+            We&apos;re adding pieces to {title} right now. Check back shortly, or explore the rest of the store in the meantime.
+          </p>
+          <Link href="/shop" className="btn-primary mt-6">
+            Shop all products
+          </Link>
+        </div>
+      ) : (
+        <div className="lg:grid lg:grid-cols-[250px_1fr] lg:gap-10">
+          {/* Desktop filters */}
+          <aside className="hidden lg:block" aria-label="Product filters">
+            <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto pr-2">
+              <div className="flex items-center justify-between border-b border-line pb-3">
+                <h2 className="text-base font-semibold">Filters</h2>
                 {activeCount > 0 && (
-                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-[11px] font-bold text-white">
-                    {activeCount}
-                  </span>
+                  <button type="button" onClick={() => update(EMPTY_FILTERS)} className="text-sm text-accent hover:underline">
+                    Clear all
+                  </button>
                 )}
-              </button>
-              <SortSelect value={sort} onChange={(v) => startTransition(() => setSort(v))} />
+              </div>
+              <FilterPanel filters={filters} onChange={update} source={panelSource} hideCategory={!!lockedCategory} />
             </div>
-          </div>
+          </aside>
 
-          {(chips.length > 0 || deferredQuery) && (
-            <div className="mb-5 flex flex-wrap items-center gap-2">
-              {deferredQuery && (
+          <section aria-labelledby="results-heading">
+            {searchable && (
+              <form role="search" className="relative mb-4" onSubmit={(e) => e.preventDefault()}>
+                <label htmlFor="shop-search" className="sr-only">
+                  Search in {title}
+                </label>
+                <Search size={17} className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-muted" />
+                <input
+                  id="shop-search"
+                  type="search"
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setVisible(PAGE_SIZE);
+                  }}
+                  placeholder={`Search in ${title}…`}
+                  autoComplete="off"
+                  className="field-input h-12 rounded-full pr-4 pl-11 text-[15px]"
+                />
+              </form>
+            )}
+
+            {/* Toolbar */}
+            <div className="sticky top-16 z-20 -mx-4 mb-5 flex items-center justify-between gap-3 border-b border-line bg-white/95 px-4 py-3 backdrop-blur lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0 lg:pt-0 lg:backdrop-blur-none">
+              <p id="results-heading" className="text-sm text-muted" aria-live="polite">
+                <strong className="text-ink">{results.length}</strong> {results.length === 1 ? "product" : "products"}
+              </p>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setQuery("")}
-                  className="flex items-center gap-1.5 rounded-full bg-sand px-3 py-1.5 text-[13px] text-ink transition-colors hover:bg-line"
-                  aria-label={`Clear search ${deferredQuery}`}
+                  onClick={() => setDrawerOpen(true)}
+                  className="flex h-11 items-center gap-2 rounded-full border border-line px-4 text-sm font-medium hover:border-ink lg:hidden"
                 >
-                  &ldquo;{deferredQuery}&rdquo;
-                  <X size={13} />
+                  <SlidersHorizontal size={15} />
+                  Filter
+                  {activeCount > 0 && (
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-[11px] font-bold text-white">
+                      {activeCount}
+                    </span>
+                  )}
                 </button>
-              )}
-              {chips.map((chip) => (
-                <button
-                  key={chip.key}
-                  type="button"
-                  onClick={() => update(chip.remove(filters))}
-                  className="flex items-center gap-1.5 rounded-full bg-sand px-3 py-1.5 text-[13px] text-ink transition-colors hover:bg-line"
-                  aria-label={`Remove filter ${chip.label}`}
-                >
-                  {chip.label}
-                  <X size={13} />
-                </button>
-              ))}
-              <button type="button" onClick={clearAll} className="px-2 text-[13px] font-medium text-accent hover:underline">
-                Clear all
-              </button>
+                <SortSelect value={sort} onChange={(v) => startTransition(() => setSort(v))} />
+              </div>
             </div>
-          )}
 
-          <div className={cn("transition-opacity duration-200", isPending && "opacity-60")}>
-            {results.length ? (
-              <>
-                <ProductGrid products={shown} priorityCount={4} columns="wide" />
-                {loadingMore && (
-                  <div className="mt-8">
-                    <ProductGridSkeleton count={4} />
-                  </div>
+            {(chips.length > 0 || deferredQuery) && (
+              <div className="mb-5 flex flex-wrap items-center gap-2">
+                {deferredQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery("")}
+                    className="flex items-center gap-1.5 rounded-full bg-sand px-3 py-1.5 text-[13px] text-ink transition-colors hover:bg-line"
+                    aria-label={`Clear search ${deferredQuery}`}
+                  >
+                    &ldquo;{deferredQuery}&rdquo;
+                    <X size={13} />
+                  </button>
                 )}
-                {visible < results.length && !loadingMore && (
-                  <div className="mt-12 flex flex-col items-center gap-3">
-                    <p className="text-sm text-muted">
-                      Showing {shown.length} of {results.length}
-                    </p>
-                    <div className="h-1 w-48 overflow-hidden rounded-full bg-line" aria-hidden>
-                      <div className="h-full bg-ink" style={{ width: `${(shown.length / results.length) * 100}%` }} />
-                    </div>
-                    <button type="button" onClick={loadMore} className="btn-outline mt-2 px-10">
-                      Load more
-                    </button>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="flex flex-col items-center rounded-2xl bg-canvas px-6 py-16 text-center">
-                <SearchX size={36} className="text-accent" />
-                <h2 className="mt-4 text-xl font-semibold">
-                  {deferredQuery ? <>Nothing here matches &ldquo;{deferredQuery}&rdquo;</> : "No products match these filters"}
-                </h2>
-                <p className="mt-1 max-w-sm text-sm text-muted">
-                  Try removing a filter, widening the price range or searching for something broader.
-                </p>
-                <button type="button" onClick={clearAll} className="btn-primary mt-6">
-                  Clear all filters
+                {chips.map((chip) => (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={() => update(chip.remove(filters))}
+                    className="flex items-center gap-1.5 rounded-full bg-sand px-3 py-1.5 text-[13px] text-ink transition-colors hover:bg-line"
+                    aria-label={`Remove filter ${chip.label}`}
+                  >
+                    {chip.label}
+                    <X size={13} />
+                  </button>
+                ))}
+                <button type="button" onClick={clearAll} className="px-2 text-[13px] font-medium text-accent hover:underline">
+                  Clear all
                 </button>
               </div>
             )}
-          </div>
-        </section>
-      </div>
+
+            <div className={cn("transition-opacity duration-200", isPending && "opacity-60")}>
+              {results.length ? (
+                <>
+                  <ProductGrid products={shown} priorityCount={4} columns="wide" />
+                  {loadingMore && (
+                    <div className="mt-8">
+                      <ProductGridSkeleton count={4} />
+                    </div>
+                  )}
+                  {visible < results.length && !loadingMore && (
+                    <div className="mt-12 flex flex-col items-center gap-3">
+                      <p className="text-sm text-muted">
+                        Showing {shown.length} of {results.length}
+                      </p>
+                      <div className="h-1 w-48 overflow-hidden rounded-full bg-line" aria-hidden>
+                        <div className="h-full bg-ink" style={{ width: `${(shown.length / results.length) * 100}%` }} />
+                      </div>
+                      <button type="button" onClick={loadMore} className="btn-outline mt-2 px-10">
+                        Load more
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex flex-col items-center rounded-2xl bg-canvas px-6 py-16 text-center">
+                  <SearchX size={36} className="text-accent" />
+                  <h2 className="mt-4 text-xl font-semibold">
+                    {deferredQuery ? <>Nothing here matches &ldquo;{deferredQuery}&rdquo;</> : "No products match these filters"}
+                  </h2>
+                  <p className="mt-1 max-w-sm text-sm text-muted">
+                    Try removing a filter, widening the price range or searching for something broader.
+                  </p>
+                  <button type="button" onClick={clearAll} className="btn-primary mt-6">
+                    Clear all filters
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* Mobile / tablet filter drawer */}
       <Dialog

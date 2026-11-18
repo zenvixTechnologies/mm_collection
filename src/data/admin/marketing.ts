@@ -115,7 +115,7 @@ export const mockBanners: HomepageBanner[] = [
 export const mockFeaturedProductIds: string[] = getBestSellers(8).map((p) => p.id);
 
 export const mockHomepageSections: HomepageSection[] = [
-  { id: "audience", label: "Shop by audience", description: "Women · Men · Kids selector cards", visible: true },
+  { id: "audience", label: "Shop by audience", description: "Women · Men · Kids · Home & Living selector cards", visible: true },
   { id: "categories", label: "Category grid", description: "Popular categories with photos", visible: true },
   { id: "featured", label: "Featured collections", description: "The featured products you pick below", visible: true },
   { id: "promo", label: "Promotional banner", description: "Active promo banners", visible: true },

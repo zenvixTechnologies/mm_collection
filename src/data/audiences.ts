@@ -3,10 +3,14 @@ import { IMG, portrait } from "./images";
 
 export interface AudienceInfo {
   id: Audience;
-  /** Short nav label — "Women". */
+  /** Short nav label — "Women", "Home & Living". */
   label: string;
-  /** "Women's", "Men's", "Kids'" */
+  /** Tighter label for narrow switchers (phones, the lg header) — "Home". Falls back to `label`. */
+  shortLabel?: string;
+  /** "Women's", "Men's", "Kids'", "Home & Living" */
   possessive: string;
+  /** Clothing collections get size charts and "styles"; home collections are counted as "products". */
+  kind: "apparel" | "home";
   href: `/${Audience}`;
   title: string;
   tagline: string;
@@ -23,6 +27,7 @@ export const AUDIENCES: AudienceInfo[] = [
   {
     id: "women",
     label: "Women",
+    kind: "apparel",
     possessive: "Women's",
     href: "/women",
     title: "Women's Collection",
@@ -34,6 +39,7 @@ export const AUDIENCES: AudienceInfo[] = [
   {
     id: "men",
     label: "Men",
+    kind: "apparel",
     possessive: "Men's",
     href: "/men",
     title: "Men's Collection",
@@ -45,6 +51,7 @@ export const AUDIENCES: AudienceInfo[] = [
   {
     id: "kids",
     label: "Kids",
+    kind: "apparel",
     possessive: "Kids'",
     href: "/kids",
     title: "Kids' Collection",
@@ -52,6 +59,19 @@ export const AUDIENCES: AudienceInfo[] = [
     heroImage: portrait(IMG.kidsGroup),
     cardImage: portrait(IMG.kidsGroup),
     keywords: ["kids", "kid", "children", "child", "boys", "boy", "girls", "girl", "baby", "toddler"],
+  },
+  {
+    id: "home-living",
+    label: "Home & Living",
+    shortLabel: "Home",
+    kind: "home",
+    possessive: "Home & Living",
+    href: "/home-living",
+    title: "Home & Living",
+    tagline: "Bedsheets, pillow covers, cushion covers and blankets to make every room feel like home.",
+    heroImage: portrait(IMG.whiteMadeBed),
+    cardImage: portrait(IMG.stripedBedding),
+    keywords: ["home", "living", "bedding", "bed", "linen", "linens", "furnishing", "furnishings", "decor", "bedroom"],
   },
 ];
 
@@ -62,5 +82,11 @@ export function getAudience(id: Audience) {
 }
 
 export function isAudience(v: unknown): v is Audience {
-  return v === "women" || v === "men" || v === "kids";
+  return AUDIENCES.some((a) => a.id === v);
+}
+
+/** "12 styles" for clothing, "4 products" for Home & Living. */
+export function countLabel(count: number, audience: Audience) {
+  const style = getAudience(audience).kind === "apparel";
+  return `${count} ${style ? (count === 1 ? "style" : "styles") : count === 1 ? "product" : "products"}`;
 }

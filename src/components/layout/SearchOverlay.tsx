@@ -4,11 +4,11 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowRight, Search, TrendingUp } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { POPULAR_SEARCHES, searchProducts } from "@/lib/catalog";
+import { POPULAR_SEARCHES, searchCategories, searchProducts } from "@/lib/catalog";
 import { formatPrice } from "@/lib/utils";
 import { useUIStore } from "@/store/ui-store";
 import { getAudience } from "@/data/audiences";
-import { getCategoriesByAudience } from "@/data/categories";
+import { categoryFullName, getCategoriesByAudience } from "@/data/categories";
 import { useActiveAudience } from "@/store/audience-store";
 import { Dialog } from "@/components/ui/Dialog";
 import { ProductImage } from "@/components/ui/ProductImage";
@@ -22,6 +22,7 @@ export function SearchOverlay() {
   const audience = useActiveAudience();
   const deferred = useDeferredValue(query);
   const results = useMemo(() => searchProducts(deferred).slice(0, 6), [deferred]);
+  const matchedCategories = useMemo(() => searchCategories(deferred), [deferred]);
 
   useEffect(() => setOpen(false), [pathname, setOpen]);
   useEffect(() => {
@@ -102,33 +103,54 @@ export function SearchOverlay() {
               </div>
             </div>
           </div>
-        ) : results.length ? (
+        ) : results.length || matchedCategories.length ? (
           <div className="mt-5">
-            <p className="mb-2 text-xs font-semibold tracking-wider text-muted uppercase">Products</p>
-            <ul className="divide-y divide-line">
-              {results.map((p) => (
-                <li key={p.id}>
-                  <Link href={`/product/${p.slug}`} className="flex items-center gap-4 rounded-lg py-2.5 hover:bg-canvas">
-                    <div className="relative h-16 w-13 shrink-0 overflow-hidden rounded-md bg-sand">
-                      <ProductImage src={p.images[0]} alt={p.name} fill sizes="52px" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[15px] font-medium">{p.name}</p>
-                      <p className="text-sm text-muted">
-                        {formatPrice(p.price)}
-                        <span className="ml-2 rounded-full bg-sand px-2 py-0.5 text-[11px] font-semibold text-ink">
-                          {getAudience(p.audienceCategory).label}
-                        </span>
-                      </p>
-                    </div>
-                    <ArrowRight size={16} className="text-subtle" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            <button type="button" onClick={() => submit(query)} className="btn-outline mt-4 w-full">
-              See all results for &ldquo;{query.trim()}&rdquo;
-            </button>
+            {matchedCategories.length > 0 && (
+              <div className={results.length ? "mb-5" : undefined}>
+                <p className="mb-2 text-xs font-semibold tracking-wider text-muted uppercase">Categories</p>
+                <div className="flex flex-wrap gap-2">
+                  {matchedCategories.map((c) => (
+                    <Link
+                      key={c.id}
+                      href={`/categories/${c.slug}`}
+                      className="rounded-full bg-sand px-4 py-2 text-sm text-ink transition-colors hover:bg-line"
+                    >
+                      {categoryFullName(c)}
+                      <span className="ml-1.5 text-xs text-muted">in {getAudience(c.audience).label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+            {results.length > 0 && (
+              <>
+                <p className="mb-2 text-xs font-semibold tracking-wider text-muted uppercase">Products</p>
+                <ul className="divide-y divide-line">
+                  {results.map((p) => (
+                    <li key={p.id}>
+                      <Link href={`/product/${p.slug}`} className="flex items-center gap-4 rounded-lg py-2.5 hover:bg-canvas">
+                        <div className="relative h-16 w-13 shrink-0 overflow-hidden rounded-md bg-sand">
+                          <ProductImage src={p.images[0]} alt={p.name} fill sizes="52px" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[15px] font-medium">{p.name}</p>
+                          <p className="text-sm text-muted">
+                            {formatPrice(p.price)}
+                            <span className="ml-2 rounded-full bg-sand px-2 py-0.5 text-[11px] font-semibold text-ink">
+                              {getAudience(p.audienceCategory).label}
+                            </span>
+                          </p>
+                        </div>
+                        <ArrowRight size={16} className="text-subtle" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+                <button type="button" onClick={() => submit(query)} className="btn-outline mt-4 w-full">
+                  See all results for &ldquo;{query.trim()}&rdquo;
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <p className="mt-8 text-center text-muted">

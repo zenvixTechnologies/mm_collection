@@ -49,11 +49,14 @@ export default async function ProductPage({ params }: Params) {
     "@type": "Product",
     name: product.name,
     sku: product.sku,
-    audience: {
-      "@type": "PeopleAudience",
-      suggestedGender: product.audienceCategory === "women" ? "female" : product.audienceCategory === "men" ? "male" : "unisex",
-      ...(product.audienceCategory === "kids" ? { suggestedMaxAge: 10 } : { suggestedMinAge: 16 }),
-    },
+    // Home & Living products aren't made for a particular person, so they carry no audience.
+    ...(audience.kind === "apparel" && {
+      audience: {
+        "@type": "PeopleAudience",
+        suggestedGender: product.audienceCategory === "women" ? "female" : product.audienceCategory === "men" ? "male" : "unisex",
+        ...(product.audienceCategory === "kids" ? { suggestedMaxAge: 10 } : { suggestedMinAge: 16 }),
+      },
+    }),
     image: product.images.map((i) => `${i}&w=1200`),
     description: product.description,
     brand: { "@type": "Brand", name: SITE.name, logo: `${SITE.url}/brand/logo-512.png` },
@@ -99,7 +102,7 @@ export default async function ProductPage({ params }: Params) {
           <section aria-labelledby="related-heading" className="mt-20">
             <SectionHeading
               id="related-heading"
-              eyebrow="Complete the look"
+              eyebrow={audience.kind === "home" ? "Complete the room" : "Complete the look"}
               title="You may also like"
               href={category ? `/categories/${category.slug}` : audience.href}
             />

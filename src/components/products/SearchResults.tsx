@@ -6,10 +6,11 @@ import { Search, SearchX } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Audience } from "@/types";
 import { AUDIENCES } from "@/data/audiences";
+import { categoryFullName } from "@/data/categories";
 import { getBestSellers } from "@/data/products";
 import { cn } from "@/lib/utils";
 import { useActiveAudience } from "@/store/audience-store";
-import { POPULAR_SEARCHES, searchProducts, sortProducts, type SortValue } from "@/lib/catalog";
+import { POPULAR_SEARCHES, searchCategories, searchProducts, sortProducts, type SortValue } from "@/lib/catalog";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { ProductGrid } from "./ProductGrid";
@@ -25,7 +26,10 @@ export function SearchResults({ initialQuery, scope }: { initialQuery: string; s
     const found = scope ? allMatches.filter((p) => p.audienceCategory === scope) : allMatches;
     return sort === "featured" ? found : sortProducts(found, sort);
   }, [allMatches, scope, sort]);
+  const matchedCategories = useMemo(() => searchCategories(initialQuery, 6), [initialQuery]);
   const suggestFor = scope ?? browsing;
+  // A new collection may have no best sellers yet — fall back to the whole store's.
+  const bestSellers = getBestSellers(4, suggestFor).length ? getBestSellers(4, suggestFor) : getBestSellers(4);
 
   const href = (q: string, s: Audience | null) => {
     const params = new URLSearchParams();
@@ -70,7 +74,7 @@ export function SearchResults({ initialQuery, scope }: { initialQuery: string; s
 
       {initialQuery && allMatches.length > 0 && (
         <nav aria-label="Search in" className="mt-6 flex flex-wrap gap-2">
-          {[null, ...AUDIENCES.map((a) => a.id)].map((a) => {
+          {[null, ...AUDIENCES.filter((a) => scope === a.id || allMatches.some((p) => p.audienceCategory === a.id)).map((a) => a.id)].map((a) => {
             const count = a ? allMatches.filter((p) => p.audienceCategory === a).length : allMatches.length;
             const label = a ? AUDIENCES.find((x) => x.id === a)!.label : "All";
             return (
@@ -87,6 +91,24 @@ export function SearchResults({ initialQuery, scope }: { initialQuery: string; s
               </Link>
             );
           })}
+        </nav>
+      )}
+
+      {matchedCategories.length > 0 && (
+        <nav aria-label="Matching categories" className="mt-6">
+          <p className="mb-2 text-xs font-semibold tracking-wider text-muted uppercase">Categories</p>
+          <div className="flex flex-wrap gap-2">
+            {matchedCategories.map((c) => (
+              <Link
+                key={c.id}
+                href={`/categories/${c.slug}`}
+                className="rounded-full bg-sand px-4 py-2 text-sm text-ink transition-colors hover:bg-line"
+              >
+                {categoryFullName(c)}
+                <span className="ml-1.5 text-xs text-muted">in {AUDIENCES.find((a) => a.id === c.audience)!.label}</span>
+              </Link>
+            ))}
+          </div>
         </nav>
       )}
 
@@ -124,8 +146,11 @@ export function SearchResults({ initialQuery, scope }: { initialQuery: string; s
               </button>
             ))}
           </div>
-          <SectionHeading title="Best sellers you might like" href={`/best-sellers?for=${suggestFor}`} />
-          <ProductGrid products={getBestSellers(4, suggestFor)} />
+          <SectionHeading
+            title="Best sellers you might like"
+            href={getBestSellers(4, suggestFor).length ? `/best-sellers?for=${suggestFor}` : "/best-sellers"}
+          />
+          <ProductGrid products={bestSellers} />
         </div>
       )}
     </div>
