@@ -15,6 +15,7 @@ import { Price } from "@/components/ui/Price";
 import { QuantitySelector } from "@/components/ui/QuantitySelector";
 import { Rating } from "@/components/ui/Rating";
 import { PincodeChecker } from "./PincodeChecker";
+import { ColourDisclaimer } from "./ColourDisclaimer";
 import { SizeGuide } from "./SizeGuide";
 import { StockStatus } from "./StockStatus";
 import { VariantPicker } from "./VariantPicker";
@@ -77,7 +78,8 @@ export function ProductPurchase({ product }: { product: Product }) {
           onSize={p.setSize}
           onColor={p.setColor}
           errors={p.errors}
-          onSizeGuide={() => setGuideOpen(true)}
+          // Body-measurement charts only make sense for clothing, not bedsheets or cushion covers.
+          onSizeGuide={audience.kind === "apparel" ? () => setGuideOpen(true) : undefined}
           idPrefix="pdp"
         />
       </div>
@@ -128,6 +130,8 @@ export function ProductPurchase({ product }: { product: Product }) {
         </p>
       )}
 
+      <ColourDisclaimer className="mt-3" />
+
       <div className="mt-6">
         <PincodeChecker />
       </div>
@@ -153,7 +157,7 @@ export function ProductPurchase({ product }: { product: Product }) {
         </div>
       </div>
 
-      <SizeGuide open={guideOpen} onClose={() => setGuideOpen(false)} product={product} />
+      {audience.kind === "apparel" && <SizeGuide open={guideOpen} onClose={() => setGuideOpen(false)} product={product} />}
     </div>
   );
 }

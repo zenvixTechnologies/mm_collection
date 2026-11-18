@@ -72,7 +72,7 @@ function CategoryForm({ category, audience, onDone }: { category: AdminCategory 
             }}
           />
           <SelectField
-            label="Audience"
+            label="Main category"
             value={c.audience}
             options={AUDIENCE_OPTIONS}
             disabled={Boolean(category)}
@@ -87,7 +87,7 @@ function CategoryForm({ category, audience, onDone }: { category: AdminCategory 
           Cancel
         </button>
         <button type="submit" className="btn-primary btn-sm">
-          {category ? "Save changes" : "Add category"}
+          {category ? "Save changes" : "Add sub-category"}
         </button>
       </div>
     </form>
@@ -120,7 +120,7 @@ export function CategoriesView() {
       <PageHeader
         breadcrumbs={[{ label: "Categories" }]}
         title="Categories"
-        description="Organise the store into Women, Men and Kids, each with its own sub-categories. The order here is the order shoppers see."
+        description="Organise the store into Women, Men, Kids and Home & Living, each with its own sub-categories. The order here is the order shoppers see."
         actions={
           <button
             type="button"
@@ -130,13 +130,13 @@ export function CategoriesView() {
               setFormOpen(true);
             }}
           >
-            <Plus size={16} aria-hidden /> Add category
+            <Plus size={16} aria-hidden /> Add sub-category
           </button>
         }
       />
 
       <Tabs<Audience>
-        label="Audience"
+        label="Main category"
         value={tab}
         onChange={setTab}
         items={AUDIENCE_OPTIONS.map((a) => ({ value: a.value, label: a.label, count: count(a.value) }))}
@@ -210,11 +210,11 @@ export function CategoriesView() {
         </ul>
       ) : (
         <div className="card py-14">
-          <TableEmpty icon={<FolderTree size={24} />} title="No categories yet" description={`Add the first ${info.possessive.toLowerCase()} category.`} />
+          <TableEmpty icon={<FolderTree size={24} />} title="No sub-categories yet" description={`Add the first ${info.label} sub-category.`} />
         </div>
       )}
 
-      <Dialog open={formOpen} onClose={() => setFormOpen(false)} title={editing ? `Edit ${editing.name}` : "Add category"} size="lg">
+      <Dialog open={formOpen} onClose={() => setFormOpen(false)} title={editing ? `Edit ${editing.name}` : `Add ${getAudience(tab).label} sub-category`} size="lg">
         {formOpen && <CategoryForm key={editing?.id ?? "new"} category={editing} audience={tab} onDone={() => setFormOpen(false)} />}
       </Dialog>
 

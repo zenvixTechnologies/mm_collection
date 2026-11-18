@@ -122,12 +122,18 @@ const kidsCategories: Category[] = [
   cat("kids", "kids-casual-wear", "Casual Wear", "Easy, durable outfits made for play and everyday adventures.", IMG.girlDungaree),
 ];
 
+const homeLivingCategories: Category[] = [
+  cat("home-living", "home-bedsheets", "Bedsheets", "Soft, breathable bedsheets to dress every bed in your home.", IMG.stripedBedding),
+  cat("home-living", "home-pillow-covers", "Pillow Covers", "Easy-care pillow covers to freshen up the bed in minutes.", IMG.velvetPillowStack),
+  cat("home-living", "home-cushion-covers", "Cushion Covers", "Printed and textured cushion covers that bring colour to any sofa.", IMG.printedCushionStack),
+  cat("home-living", "home-blankets", "Blankets", "Cosy blankets and throws for chilly nights and lazy afternoons.", IMG.foldedBlankets),
+];
+
 function cat(audience: Audience, id: CategoryId, name: string, description: string, photo: string): Category {
   return { id, slug: id, audience, name, description, image: portrait(photo) };
 }
 
-export const categories: Category[] = [...womenCategories, ...menCategories, ...kidsCategories];
-
+export const categories: Category[] = [...womenCategories, ...menCategories, ...kidsCategories, ...homeLivingCategories];
 
 export function getCategory(id: string) {
   return categories.find((c) => c.id === id);
@@ -141,8 +147,11 @@ export function getCategoriesByAudience(audience: Audience) {
   return categories.filter((c) => c.audience === audience);
 }
 
-/** Name that stays unambiguous outside its audience — "Men's Shirts", "Kids' T-Shirts", "Dresses". */
-export function categoryFullName(c: Category) {
-  if (c.audience === "women" || /^(men|kids)/i.test(c.name)) return c.name;
+/**
+ * Name that stays unambiguous outside its audience — "Men's Shirts", "Kids' T-Shirts", "Dresses", "Bedsheets".
+ * Shared with the admin, whose categories use the same audience + name shape.
+ */
+export function categoryFullName(c: Pick<Category, "audience" | "name">) {
+  if (c.audience === "women" || c.audience === "home-living" || /^(men|kids)/i.test(c.name)) return c.name;
   return `${c.audience === "men" ? "Men's" : "Kids'"} ${c.name}`;
 }

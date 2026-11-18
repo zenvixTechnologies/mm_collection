@@ -107,6 +107,10 @@ const CATEGORY_CODE: Record<CategoryId, string> = {
   "kids-baby": "KBB",
   "kids-ethnic-wear": "KET",
   "kids-casual-wear": "KCS",
+  "home-bedsheets": "HBS",
+  "home-pillow-covers": "HPC",
+  "home-cushion-covers": "HCC",
+  "home-blankets": "HBL",
 };
 
 function audienceOf(categoryId: CategoryId): Audience {
@@ -1944,6 +1948,14 @@ export const ALL_SIZES: Size[] = [
   "5-6Y",
   "7-8Y",
   "9-10Y",
+  "Single",
+  "Double",
+  "Queen",
+  "King",
+  "Standard",
+  "16 × 16 in",
+  "18 × 18 in",
+  "24 × 24 in",
 ];
 
 export const ALL_COLORS: ProductColor[] = Array.from(

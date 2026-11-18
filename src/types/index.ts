@@ -1,5 +1,8 @@
-/** Top-level shopping audience. Women is the brand's primary focus and the default. */
-export type Audience = "women" | "men" | "kids";
+/**
+ * Top-level shopping audience — the store's main categories (Women / Men / Kids / Home & Living).
+ * Women is the brand's primary focus and the default.
+ */
+export type Audience = "women" | "men" | "kids" | "home-living";
 
 export type WomenCategoryId =
   | "dresses"
@@ -35,8 +38,10 @@ export type KidsCategoryId =
   | "kids-ethnic-wear"
   | "kids-casual-wear";
 
-/** A sub-category within one audience (e.g. Men → Shirts). */
-export type CategoryId = WomenCategoryId | MenCategoryId | KidsCategoryId;
+export type HomeLivingCategoryId = "home-bedsheets" | "home-pillow-covers" | "home-cushion-covers" | "home-blankets";
+
+/** A sub-category within one audience (e.g. Men → Shirts, Home & Living → Bedsheets). */
+export type CategoryId = WomenCategoryId | MenCategoryId | KidsCategoryId | HomeLivingCategoryId;
 
 export interface Category {
   id: CategoryId;
@@ -73,7 +78,16 @@ export type Size =
   | "3-4Y"
   | "5-6Y"
   | "7-8Y"
-  | "9-10Y";
+  | "9-10Y"
+  // Home & Living — bed sizes and cushion / pillow dimensions
+  | "Single"
+  | "Double"
+  | "Queen"
+  | "King"
+  | "Standard"
+  | "16 × 16 in"
+  | "18 × 18 in"
+  | "24 × 24 in";
 
 export interface Product {
   id: string;

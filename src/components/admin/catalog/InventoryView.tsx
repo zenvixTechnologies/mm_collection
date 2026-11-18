@@ -18,6 +18,7 @@ import { PageHeader } from "../ui/PageHeader";
 import { Panel, StatCard } from "../ui/Panel";
 import { formatCompactPrice, formatNumber, timeAgo } from "../ui/format";
 import { FilterSelect, SearchInput, Tabs, Toolbar } from "../ui/Toolbar";
+import { AUDIENCE_OPTIONS } from "./catalog-helpers";
 
 type Filter = "all" | StockState;
 const REASONS: StockAdjustment["reason"][] = ["Restock", "Return", "Correction", "Damaged", "Sale"];
@@ -255,15 +256,10 @@ export function InventoryView() {
           <Toolbar className="p-4">
             <SearchInput value={q} onChange={setQ} placeholder="Search by name or SKU" label="Search inventory" className="sm:max-w-xs sm:flex-1" />
             <FilterSelect
-              label="Audience"
+              label="Main category"
               value={audience}
               onChange={setAudience}
-              options={[
-                { value: "all", label: "All audiences" },
-                { value: "women", label: "Women" },
-                { value: "men", label: "Men" },
-                { value: "kids", label: "Kids" },
-              ]}
+              options={[{ value: "all", label: "All main categories" }, ...AUDIENCE_OPTIONS]}
             />
           </Toolbar>
           <DataTable

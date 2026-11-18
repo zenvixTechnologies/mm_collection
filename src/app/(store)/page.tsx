@@ -32,9 +32,9 @@ export default function HomePage() {
       <section aria-labelledby="audience-heading" className="container-page mt-14 sm:mt-20">
         <SectionHeading
           id="audience-heading"
-          eyebrow="Women · Men · Kids"
+          eyebrow="Women · Men · Kids · Home & Living"
           title="Who are you shopping for?"
-          description="Explore collections made for everyone."
+          description="Explore collections made for everyone — and for every room at home."
         />
         <AudienceSelector />
       </section>

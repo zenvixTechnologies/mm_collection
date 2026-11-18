@@ -7,6 +7,7 @@ import { ChevronDown, Heart, Menu, Search, ShoppingBag, User } from "lucide-reac
 import { useEffect, useRef, useState } from "react";
 import { getAudience } from "@/data/audiences";
 import { getCategoriesByAudience } from "@/data/categories";
+import { getNewArrivals } from "@/data/products";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { cn } from "@/lib/utils";
 import { useActiveAudience } from "@/store/audience-store";
@@ -50,6 +51,8 @@ export function Header() {
   const audience = useActiveAudience();
   const audienceInfo = getAudience(audience);
   const menuCategories = getCategoriesByAudience(audience);
+  // A brand-new collection (e.g. Home & Living) has no arrivals yet — the promo card opens the collection instead.
+  const hasArrivals = getNewArrivals(1, audience).length > 0;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -85,18 +88,18 @@ export function Header() {
         <Logo withWordmark priority className="absolute left-1/2 -translate-x-1/2 lg:static lg:translate-x-0" />
 
         {/* Desktop nav */}
-        <nav aria-label="Main" className="mx-auto hidden items-center gap-3 lg:flex xl:gap-5">
+        <nav aria-label="Main" className="mx-auto hidden items-center gap-2 lg:flex xl:gap-5">
           <AudienceSwitcher variant="header" />
           <span className="h-6 w-px bg-line" aria-hidden />
-          <ul className="flex items-center gap-1">
+          <ul className="flex items-center gap-0.5 xl:gap-1">
             {NAV_LINKS.filter((link) => link.desktop).map((link) => {
               const active = isActivePath(pathname, link.href);
               const base = cn(
-                "relative flex h-10 items-center gap-1 rounded-full px-4 text-[14.5px] font-medium transition-colors",
+                "relative flex h-10 items-center gap-1 rounded-full px-3 text-[14.5px] font-medium whitespace-nowrap transition-colors xl:px-4",
                 active ? "text-ink" : "text-muted hover:text-ink",
               );
               const underline = active && (
-                <motion.span layoutId="nav-underline" className="absolute inset-x-4 -bottom-0.5 h-[2px] rounded-full bg-gradient-to-r from-gold-dark via-gold to-gold-dark" />
+                <motion.span layoutId="nav-underline" className="absolute inset-x-3 -bottom-0.5 h-[2px] xl:inset-x-4 rounded-full bg-gradient-to-r from-gold-dark via-gold to-gold-dark" />
               );
               if ("hasMenu" in link) {
                 return (
@@ -152,17 +155,17 @@ export function Header() {
                                 </Link>
                               </li>
                             </ul>
-                            <Link href={`/new-arrivals?for=${audience}`} className="group relative overflow-hidden rounded-xl">
+                            <Link href={hasArrivals ? `/new-arrivals?for=${audience}` : audienceInfo.href} className="group relative overflow-hidden rounded-xl">
                               <div className="relative aspect-[4/5]">
                                 <ProductImage
                                   src={menuCategories[0].image}
-                                  alt={`${audienceInfo.possessive} new arrivals at M&M COLLECTIONS`}
+                                  alt={`${audienceInfo.possessive} ${hasArrivals ? "new arrivals" : "collection"} at M&M COLLECTIONS`}
                                   fill
                                   sizes="200px"
                                   className="transition-transform duration-500 group-hover:scale-105"
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                                <p className="absolute bottom-3 left-3 text-sm font-semibold text-white">New Arrivals →</p>
+                                <p className="absolute bottom-3 left-3 text-sm font-semibold text-white">{hasArrivals ? "New Arrivals →" : "Explore the collection →"}</p>
                               </div>
                             </Link>
                           </div>

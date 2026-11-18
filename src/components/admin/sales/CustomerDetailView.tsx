@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Ban, CalendarDays, IndianRupee, Mail, MapPin, MessageCircle, Phone, ReceiptText, ShoppingBag, UserCheck, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { AdminOrder } from "@/types/admin";
+import { getAudience } from "@/data/audiences";
 import { customersWithStats } from "@/lib/admin/metrics";
 import { formatDate, formatPrice } from "@/lib/utils";
 import { useAdminStore } from "@/store/admin-store";
@@ -153,7 +154,7 @@ export function CustomerDetailView({ id }: { id: string }) {
             <dl className="space-y-2.5 text-sm">
               <div className="flex justify-between gap-3">
                 <dt className="text-muted">Shops mostly for</dt>
-                <dd className="font-medium capitalize">{customer.primaryAudience}</dd>
+                <dd className="font-medium">{getAudience(customer.primaryAudience).label}</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt className="text-muted">Marketing emails</dt>

@@ -1,4 +1,4 @@
-import type { Audience, Product, Size } from "@/types";
+import type { Audience, Category, Product, Size } from "@/types";
 import { AUDIENCES } from "@/data/audiences";
 import { categories, categoryFullName } from "@/data/categories";
 import { productInCategory, products } from "@/data/products";
@@ -21,7 +21,7 @@ export function isSortValue(v: unknown): v is SortValue {
 export const DISCOUNT_OPTIONS = [10, 20, 30, 40] as const;
 
 export interface Filters {
-  /** Women / Men / Kids — only offered where a listing mixes audiences (Shop All, New Arrivals…). */
+  /** Women / Men / Kids / Home & Living — only offered where a listing mixes audiences (Shop All, New Arrivals…). */
   audiences: Audience[];
   categories: string[];
   sizes: Size[];
@@ -150,8 +150,32 @@ export function searchProducts(query: string, source: Product[] = products) {
     .map((x) => x.p);
 }
 
+/**
+ * Categories whose name (or main category, e.g. "home", "bedding", "kids") matches every search term —
+ * lets search lead shoppers to a category even before it has products.
+ */
+export function searchCategories(query: string, limit = 4): Category[] {
+  const terms = normalize(query)
+    .split(/\s+/)
+    .filter((t) => t.length > 1);
+  if (!terms.length) return [];
+  return categories
+    .filter((c) => {
+      const info = AUDIENCES.find((a) => a.id === c.audience);
+      const words = normalize([categoryFullName(c), info?.label ?? "", ...(info?.keywords ?? [])].join(" "))
+        .split(/\s+/)
+        .filter(Boolean);
+      return terms.every((t) => {
+        const stem = t.replace(/(es|s)$/, "");
+        return words.some((w) => w.startsWith(t) || (stem.length > 2 && w.startsWith(stem)));
+      });
+    })
+    .slice(0, limit);
+}
+
 export const POPULAR_SEARCHES: Record<Audience, string[]> = {
   women: ["Kurti", "Maxi dress", "Co-ord set", "Saree", "Feeding", "Party gown"],
   men: ["Shirt", "Jeans", "Kurta", "T-shirt", "Suit", "Chinos"],
   kids: ["Frock", "Kurta", "Baby", "Polo", "Party dress", "Dungaree"],
+  "home-living": ["Bedsheet", "Pillow cover", "Cushion cover", "Blanket"],
 };

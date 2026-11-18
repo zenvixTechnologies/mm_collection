@@ -75,6 +75,11 @@ export function DashboardView() {
     return { key: a.id, label: a.possessive, value: revenue };
   });
   const audienceTotal = byAudience.reduce((s, a) => s + a.value, 0) || 1;
+  // Live catalogue size per main category (archived products excluded).
+  const catalogue = AUDIENCES.map((a) => {
+    const list = products.filter((p) => p.audienceCategory === a.id && p.status !== "archived");
+    return { id: a.id, label: a.label, count: list.length, units: list.reduce((n, p) => n + p.stock, 0) };
+  });
 
   const top = topProducts(inRange, 5);
   const alerts = products
@@ -206,9 +211,9 @@ export function DashboardView() {
           </div>
         </Panel>
 
-        <Panel title="Sales by audience" description={`Share of item revenue · last ${days} days`}>
+        <Panel title="Sales by main category" description={`Share of item revenue · last ${days} days`}>
           <BarList
-            label="Revenue by audience"
+            label="Revenue by main category"
             tone="gold"
             items={byAudience.map((a) => ({
               ...a,
@@ -217,6 +222,20 @@ export function DashboardView() {
             }))}
           />
           <p className="mt-5 text-xs leading-5 text-muted">Women remains the core of the business; Men and Kids are growing lines.</p>
+          <div className="mt-5 border-t border-line pt-4">
+            <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted uppercase">Catalogue</p>
+            <dl className="space-y-1.5 text-sm">
+              {catalogue.map((c) => (
+                <div key={c.id} className="flex items-baseline justify-between gap-3">
+                  <dt className="text-muted">{c.label}</dt>
+                  <dd className="tabular-nums">
+                    <span className="font-semibold text-ink">{formatNumber(c.count)}</span> products
+                    <span className="text-muted"> · {formatNumber(c.units)} units</span>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
         </Panel>
       </div>
 

@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, ExternalLink, GalleryHorizontalEnd, Image as ImageI
 import { useMemo, useState, type FormEvent } from "react";
 import type { BannerPlacement, HomepageBanner } from "@/types/admin";
 import { MOCK_NOW, istDateKey } from "@/data/admin/mock-utils";
+import { getAudience } from "@/data/audiences";
 import { cn, formatDate, formatPrice } from "@/lib/utils";
 import { uid, useAdminStore } from "@/store/admin-store";
 import { toast } from "@/store/ui-store";
@@ -192,8 +193,8 @@ function FeaturedPicker({ onDone }: { onDone: () => void }) {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{p.name}</span>
-                  <span className="text-xs text-muted capitalize">
-                    {p.audienceCategory} · {formatPrice(p.price)}
+                  <span className="text-xs text-muted">
+                    {getAudience(p.audienceCategory).label} · {formatPrice(p.price)}
                   </span>
                 </span>
               </label>

@@ -7,7 +7,7 @@ import { CategoryGrid } from "@/components/home/CategoryGrid";
 export const metadata: Metadata = {
   title: "Shop by Category",
   description:
-    "Explore M&M COLLECTIONS by category: women's dresses, kurtis, sarees and feeding wear; men's shirts, jeans and kurtas; kids' frocks, sets and baby clothing.",
+    "Explore M&M COLLECTIONS by category: women's dresses, kurtis, sarees and feeding wear; men's shirts, jeans and kurtas; kids' frocks, sets and baby clothing; and home & living bedsheets, pillow covers, cushion covers and blankets.",
   alternates: { canonical: "/categories" },
 };
 
@@ -18,7 +18,7 @@ export default function CategoriesPage() {
       <header className="mt-4 mb-8">
         <h1 className="font-display text-4xl font-semibold sm:text-5xl">Shop by Category</h1>
         <p className="mt-2 max-w-2xl text-muted">
-          Find exactly what you&apos;re looking for — from everyday kurtis to festive silks, sharp shirts and little ones&apos; frocks.
+          Find exactly what you&apos;re looking for — from everyday kurtis to festive silks, sharp shirts, little ones&apos; frocks and soft furnishings for your home.
         </p>
         <nav aria-label="Jump to" className="mt-5 flex flex-wrap gap-2">
           {AUDIENCES.map((a) => (

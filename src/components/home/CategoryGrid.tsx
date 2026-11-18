@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import type { Audience } from "@/types";
-import { getAudience } from "@/data/audiences";
+import { countLabel, getAudience } from "@/data/audiences";
 import { getCategoriesByAudience } from "@/data/categories";
 import { IMG, portrait } from "@/data/images";
 import { getProductsByAudience, getProductsByCategory, getNewArrivals } from "@/data/products";
@@ -16,15 +16,28 @@ interface Tile {
   count: number;
 }
 
-export function CategoryGrid({ variant = "home", audience = "women" }: { variant?: "home" | "page"; audience?: Audience }) {
+interface CategoryGridProps {
+  variant?: "home" | "page";
+  audience?: Audience;
+  /** Lead with an "All Women" style tile (off on a collection's own landing page). */
+  includeAll?: boolean;
+  /** Extra classes for the page-variant grid (e.g. a 4-up layout). */
+  className?: string;
+}
+
+export function CategoryGrid({ variant = "home", audience = "women", includeAll = true, className }: CategoryGridProps) {
   const info = getAudience(audience);
   const tiles: Tile[] = [
-    {
-      href: info.href,
-      name: `All ${info.label}`,
-      image: audience === "women" ? portrait(IMG.rackTops) : info.cardImage,
-      count: getProductsByAudience(audience).length,
-    },
+    ...(includeAll
+      ? [
+          {
+            href: info.href,
+            name: `All ${info.label}`,
+            image: audience === "women" ? portrait(IMG.rackTops) : info.cardImage,
+            count: getProductsByAudience(audience).length,
+          },
+        ]
+      : []),
     ...getCategoriesByAudience(audience).map((c) => ({
       href: `/categories/${c.slug}`,
       name: c.name,
@@ -33,7 +46,7 @@ export function CategoryGrid({ variant = "home", audience = "women" }: { variant
     })),
   ];
   // The women's row keeps its New Arrivals tile — it fills the 7-up grid to exactly two rows.
-  if (audience === "women") {
+  if (audience === "women" && includeAll) {
     tiles.push({
       href: "/new-arrivals?for=women",
       name: "New Arrivals",
@@ -74,7 +87,7 @@ export function CategoryGrid({ variant = "home", audience = "women" }: { variant
   }
 
   return (
-    <ul className="grid grid-cols-2 gap-3 sm:gap-5 md:grid-cols-3 lg:grid-cols-4">
+    <ul className={cn("grid grid-cols-2 gap-3 sm:gap-5 md:grid-cols-3 lg:grid-cols-4", className)}>
       {tiles.map((t, i) => (
         <li key={t.href}>
           <Reveal delay={Math.min(i % 4, 3) * 0.05}>
@@ -93,7 +106,7 @@ export function CategoryGrid({ variant = "home", audience = "women" }: { variant
               <div className={cn("absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-4 text-white")}>
                 <div>
                   <p className="font-display text-xl font-semibold sm:text-2xl">{t.name}</p>
-                  <p className="text-xs text-white/80">{t.count} styles</p>
+                  <p className="text-xs text-white/80">{t.count ? countLabel(t.count, audience) : "Coming soon"}</p>
                 </div>
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-ink transition-transform group-hover:rotate-45">
                   <ArrowUpRight size={17} />

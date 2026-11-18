@@ -126,27 +126,29 @@ export function FilterPanel({ filters, onChange, source, hideCategory }: FilterP
         </form>
       </Section>
 
-      <Section title="Size" count={filters.sizes.length}>
-        <div className="flex flex-wrap gap-2">
-          {sizes.map((s) => {
-            const active = filters.sizes.includes(s);
-            return (
-              <button
-                key={s}
-                type="button"
-                aria-pressed={active}
-                onClick={() => set({ sizes: toggle<Size>(filters.sizes, s) })}
-                className={cn(
-                  "h-10 min-w-11 rounded-full border px-3 text-sm font-medium transition-colors",
-                  active ? "border-ink bg-ink text-white" : "border-line hover:border-ink",
-                )}
-              >
-                {s}
-              </button>
-            );
-          })}
-        </div>
-      </Section>
+      {sizes.length > 0 && (
+        <Section title="Size" count={filters.sizes.length}>
+          <div className="flex flex-wrap gap-2">
+            {sizes.map((s) => {
+              const active = filters.sizes.includes(s);
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => set({ sizes: toggle<Size>(filters.sizes, s) })}
+                  className={cn(
+                    "h-10 min-w-11 rounded-full border px-3 text-sm font-medium transition-colors",
+                    active ? "border-ink bg-ink text-white" : "border-line hover:border-ink",
+                  )}
+                >
+                  {s}
+                </button>
+              );
+            })}
+          </div>
+        </Section>
+      )}
 
       <Section title="Colour" count={filters.colors.length}>
         <div className="grid grid-cols-2 gap-1">
@@ -193,10 +195,12 @@ export function FilterPanel({ filters, onChange, source, hideCategory }: FilterP
           ))}
         </ul>
       </Section>
-      <p className="py-4 text-xs text-muted">
-        Prices range from {formatPrice(Math.min(...source.map((p) => p.price)))} to{" "}
-        {formatPrice(Math.max(...source.map((p) => p.price)))}
-      </p>
+      {source.length > 0 && (
+        <p className="py-4 text-xs text-muted">
+          Prices range from {formatPrice(Math.min(...source.map((p) => p.price)))} to{" "}
+          {formatPrice(Math.max(...source.map((p) => p.price)))}
+        </p>
+      )}
     </div>
   );
 }

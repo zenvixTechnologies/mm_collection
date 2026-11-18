@@ -61,7 +61,7 @@ function validate(p: AdminProduct, all: AdminProduct[]): Errors {
   else if (all.some((x) => x.id !== p.id && x.sku.toLowerCase() === p.sku.trim().toLowerCase())) e.sku = "Another product already uses this SKU.";
   if (!p.slug.trim()) e.slug = "Enter a URL slug.";
   else if (all.some((x) => x.id !== p.id && x.slug === p.slug)) e.slug = "Another product already uses this URL.";
-  if (!p.categoryId) e.categoryId = "Choose a category.";
+  if (!p.categoryId) e.categoryId = "Choose a sub-category.";
   if (!(p.originalPrice > 0)) e.originalPrice = "Enter the MRP.";
   if (!(p.price > 0)) e.price = "Enter the selling price.";
   else if (p.originalPrice > 0 && p.price > p.originalPrice) e.price = "Selling price can't be more than the MRP.";
@@ -187,12 +187,12 @@ function ProductForm({ product, onDone }: { product: AdminProduct | null; onDone
 
         <FormSection title="Organisation">
           <SelectField
-            label="Audience"
+            label="Main category"
             value={p.audienceCategory}
             options={AUDIENCE_OPTIONS}
             onChange={(e) => {
               const audience = e.target.value as Audience;
-              const firstCat = categories.find((c) => c.audience === audience);
+              const firstCat = categories.filter((c) => c.audience === audience).sort((a, b) => a.sortOrder - b.sortOrder)[0];
               setP((prev) => ({
                 ...prev,
                 audienceCategory: audience,
@@ -202,7 +202,7 @@ function ProductForm({ product, onDone }: { product: AdminProduct | null; onDone
             }}
           />
           <SelectField
-            label="Category"
+            label="Sub-category"
             required
             value={p.categoryId}
             error={errors.categoryId}
