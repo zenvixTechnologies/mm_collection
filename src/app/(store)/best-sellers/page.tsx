@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { isAudience } from "@/data/audiences";
-import { getBestSellers } from "@/data/products";
+import { getCatalog } from "@/server/services/catalog.service";
 import { ShopView } from "@/components/products/ShopView";
 
 export const metadata: Metadata = {
@@ -13,6 +13,7 @@ type Props = { searchParams: Promise<{ sort?: string; category?: string; for?: s
 
 export default async function BestSellersPage({ searchParams }: Props) {
   const { sort, category, for: audience } = await searchParams;
+  const { getBestSellers } = await getCatalog();
   return (
     <ShopView
       title="Best Sellers"

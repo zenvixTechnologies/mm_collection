@@ -6,6 +6,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import type { Audience } from "@/types";
 import type { AdminCategory } from "@/types/admin";
 import { getAudience } from "@/data/audiences";
+import { imageDetails } from "@/lib/admin-upload";
 import { slugify } from "@/lib/utils";
 import { useAdminStore } from "@/store/admin-store";
 import { toast } from "@/store/ui-store";
@@ -27,8 +28,9 @@ function CategoryForm({ category, audience, onDone }: { category: AdminCategory 
   );
   const [slugTouched, setSlugTouched] = useState(Boolean(category));
   const [errors, setErrors] = useState<{ name?: string; slug?: string; image?: string }>({});
+  const [saving, setSaving] = useState(false);
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     const errs: typeof errors = {};
     if (!c.name.trim()) errs.name = "Enter a category name.";
@@ -37,7 +39,15 @@ function CategoryForm({ category, audience, onDone }: { category: AdminCategory 
     if (!c.image) errs.image = "Add a category image.";
     setErrors(errs);
     if (Object.keys(errs).length) return;
-    save({ ...c, id: c.id || c.slug, name: c.name.trim() });
+    setSaving(true);
+    const name = c.name.trim();
+    const image = c.image ? (c.image === category?.image ? { url: c.image, publicId: category.imagePublicId ?? null } : imageDetails([c.image], name)[0]) : null;
+    const res = await save({ ...c, id: c.id || c.slug, name }, !category, image);
+    setSaving(false);
+    if (!res.ok) {
+      toast.error(res.error);
+      return;
+    }
     toast.success(category ? "Category updated" : "Category added");
     onDone();
   };
@@ -86,8 +96,8 @@ function CategoryForm({ category, audience, onDone }: { category: AdminCategory 
         <button type="button" onClick={onDone} className="btn-ghost btn-sm">
           Cancel
         </button>
-        <button type="submit" className="btn-primary btn-sm">
-          {category ? "Save changes" : "Add sub-category"}
+        <button type="submit" className="btn-primary btn-sm" disabled={saving}>
+          {saving ? "Saving…" : category ? "Save changes" : "Add sub-category"}
         </button>
       </div>
     </form>
@@ -172,7 +182,7 @@ export function CategoriesView() {
                       <span className={c.visible ? "text-xs font-semibold text-success" : "text-xs font-semibold text-muted"} aria-hidden>
                         {c.visible ? "Visible" : "Hidden"}
                       </span>
-                      <Switch hideLabel label={`Show ${c.name} in store`} checked={c.visible} onChange={(v) => save({ ...c, visible: v })} />
+                      <Switch hideLabel label={`Show ${c.name} in store`} checked={c.visible} onChange={(v) => void save({ ...c, visible: v }, false).then((r) => (r.ok ? toast.success(v ? `${c.name} is now visible` : `${c.name} hidden`) : toast.error(r.error)))} />
                     </span>
                   </div>
                   <p className="mt-1.5 line-clamp-2 text-[13px] leading-5 text-muted">{c.description}</p>
@@ -181,10 +191,10 @@ export function CategoriesView() {
                       {n} product{n === 1 ? "" : "s"}
                     </span>
                     <div className="flex items-center">
-                      <button type="button" className="icon-btn h-8 w-8 text-muted disabled:opacity-30" disabled={i === 0} onClick={() => move(c.id, -1)} aria-label={`Move ${c.name} up`}>
+                      <button type="button" className="icon-btn h-8 w-8 text-muted disabled:opacity-30" disabled={i === 0} onClick={() => void move(c.id, -1).then((r) => !r.ok && toast.error(r.error))} aria-label={`Move ${c.name} up`}>
                         <ArrowUp size={15} />
                       </button>
-                      <button type="button" className="icon-btn h-8 w-8 text-muted disabled:opacity-30" disabled={i === list.length - 1} onClick={() => move(c.id, 1)} aria-label={`Move ${c.name} down`}>
+                      <button type="button" className="icon-btn h-8 w-8 text-muted disabled:opacity-30" disabled={i === list.length - 1} onClick={() => void move(c.id, 1).then((r) => !r.ok && toast.error(r.error))} aria-label={`Move ${c.name} down`}>
                         <ArrowDown size={15} />
                       </button>
                       <button
@@ -232,8 +242,7 @@ export function CategoriesView() {
           confirmLabel="Hide category instead"
           destructive={false}
           onConfirm={() => {
-            save({ ...deleting, visible: false });
-            toast.success("Category hidden");
+            void save({ ...deleting, visible: false }, false).then((r) => (r.ok ? toast.success("Category hidden") : toast.error(r.error)));
           }}
         />
       ) : (
@@ -249,8 +258,7 @@ export function CategoriesView() {
           confirmLabel="Delete"
           onConfirm={() => {
             if (!deleting) return;
-            remove(deleting.id);
-            toast.success("Category deleted");
+            void remove(deleting.id).then((r) => (r.ok ? toast.success("Category deleted") : toast.error(r.error)));
           }}
         />
       )}

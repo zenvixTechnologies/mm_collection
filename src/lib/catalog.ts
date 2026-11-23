@@ -1,7 +1,6 @@
 import type { Audience, Category, Product, Size } from "@/types";
 import { AUDIENCES } from "@/data/audiences";
-import { categories, categoryFullName } from "@/data/categories";
-import { productInCategory, products } from "@/data/products";
+import { categoryFullName, productInCategory } from "./catalog-query";
 
 export const SORT_OPTIONS = [
   { value: "featured", label: "Featured" },
@@ -104,7 +103,7 @@ function normalize(s: string) {
 }
 
 /** Lightweight keyword search across name, category, colours, fabric and description. */
-export function searchProducts(query: string, source: Product[] = products) {
+export function searchProducts(query: string, source: Product[], categories: Category[]) {
   // Single letters are noise — "men's" normalises to "men s".
   const terms = normalize(query)
     .split(/\s+/)
@@ -154,7 +153,7 @@ export function searchProducts(query: string, source: Product[] = products) {
  * Categories whose name (or main category, e.g. "home", "bedding", "kids") matches every search term —
  * lets search lead shoppers to a category even before it has products.
  */
-export function searchCategories(query: string, limit = 4): Category[] {
+export function searchCategories(query: string, categories: Category[], limit = 4): Category[] {
   const terms = normalize(query)
     .split(/\s+/)
     .filter((t) => t.length > 1);

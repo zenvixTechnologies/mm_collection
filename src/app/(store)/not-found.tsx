@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { getBestSellers } from "@/data/products";
+import { getCatalog } from "@/server/services/catalog.service";
 import { ProductGrid } from "@/components/products/ProductGrid";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 
-export default function NotFound() {
+export default async function NotFound() {
+  const { getBestSellers } = await getCatalog();
   return (
     <div className="container-page pt-14 sm:pt-20">
       <div className="mx-auto max-w-lg text-center">

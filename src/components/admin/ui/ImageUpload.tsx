@@ -1,33 +1,59 @@
 "use client";
 
 import Image from "next/image";
-import { ImagePlus, Star, Trash2 } from "lucide-react";
+import { ImagePlus, Loader2, Star, Trash2 } from "lucide-react";
 import { useId, useRef, useState } from "react";
+import { errorMessage } from "@/lib/admin-api";
+import { checkFile, uploadImage, type UploadPurpose } from "@/lib/admin-upload";
 import { cn } from "@/lib/utils";
 import { toast } from "@/store/ui-store";
 
 /**
- * DEMO UPLOAD — files are previewed locally with object URLs and never leave the browser.
- * When the API exists, upload the File here and store the returned URL instead.
+ * Image pickers for the admin. Files go straight from the browser to Cloudinary using a
+ * one-time signature from our API, then the server verifies them; only the resulting URL is
+ * passed to `onChange`.
  */
-function readFiles(list: FileList | null, max: number) {
-  const files = Array.from(list ?? []).filter((f) => f.type.startsWith("image/"));
-  const tooBig = files.filter((f) => f.size > 5 * 1024 * 1024);
-  if (tooBig.length) toast.error("Images must be under 5 MB.");
-  return files
-    .filter((f) => f.size <= 5 * 1024 * 1024)
-    .slice(0, max)
-    .map((f) => URL.createObjectURL(f));
+
+function pickFiles(list: FileList | null, max: number) {
+  const files = Array.from(list ?? []).slice(0, max);
+  const ok: File[] = [];
+  for (const f of files) {
+    const problem = checkFile(f);
+    if (problem) toast.error(problem);
+    else ok.push(f);
+  }
+  return ok;
+}
+
+/** Uploads files one by one; returns the URLs that succeeded and reports the ones that didn't. */
+async function uploadAll(files: File[], purpose: UploadPurpose, ref: string | undefined) {
+  const urls: string[] = [];
+  for (const file of files) {
+    try {
+      urls.push((await uploadImage(file, purpose, ref)).url);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  }
+  return urls;
 }
 
 function Preview({ src, alt, className }: { src: string; alt: string; className?: string }) {
-  // Blob/object URLs and local files are shown as-is; remote photos go through the image loader.
   const local = src.startsWith("blob:") || src.startsWith("/");
   return <Image src={src} alt={alt} fill sizes="200px" unoptimized={local} className={cn("object-cover", className)} />;
 }
 
+function Uploading({ className, count = 1 }: { className?: string; count?: number }) {
+  return (
+    <div className={cn("flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-gold bg-gold-soft/60 text-center", className)} role="status">
+      <Loader2 size={22} className="animate-spin text-gold-dark" aria-hidden />
+      <span className="text-[13px] font-semibold text-ink">Uploading{count > 1 ? ` ${count} images` : ""}…</span>
+    </div>
+  );
+}
+
 interface DropZoneProps {
-  onFiles: (urls: string[]) => void;
+  onFiles: (files: File[]) => void;
   max: number;
   label: string;
   hint?: string;
@@ -49,8 +75,8 @@ function DropZone({ onFiles, max, label, hint, className, compact }: DropZonePro
       onDrop={(e) => {
         e.preventDefault();
         setOver(false);
-        const urls = readFiles(e.dataTransfer.files, max);
-        if (urls.length) onFiles(urls);
+        const files = pickFiles(e.dataTransfer.files, max);
+        if (files.length) onFiles(files);
       }}
       className={cn(
         "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed text-center transition-colors",
@@ -65,12 +91,12 @@ function DropZone({ onFiles, max, label, hint, className, compact }: DropZonePro
       <input
         id={id}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp,image/avif"
         multiple={max > 1}
         className="sr-only"
         onChange={(e) => {
-          const urls = readFiles(e.target.files, max);
-          if (urls.length) onFiles(urls);
+          const files = pickFiles(e.target.files, max);
+          if (files.length) onFiles(files);
           e.target.value = "";
         }}
       />
@@ -79,8 +105,35 @@ function DropZone({ onFiles, max, label, hint, className, compact }: DropZonePro
 }
 
 /** Several images; the first one is the primary (card) image. */
-export function MultiImageUpload({ images, onChange, max = 6, altBase }: { images: string[]; onChange: (images: string[]) => void; max?: number; altBase: string }) {
-  const remaining = max - images.length;
+export function MultiImageUpload({
+  images,
+  onChange,
+  max = 6,
+  altBase,
+  purpose = "product",
+  uploadRef,
+}: {
+  images: string[];
+  onChange: (images: string[]) => void;
+  max?: number;
+  altBase: string;
+  purpose?: UploadPurpose;
+  /** Product slug — uploads are filed in that product's folder. */
+  uploadRef?: string;
+}) {
+  const [uploading, setUploading] = useState(0);
+  const remaining = max - images.length - uploading;
+  // Keep the latest list for when uploads finish (the user may reorder or remove meanwhile).
+  const latest = useRef(images);
+  latest.current = images;
+
+  const add = async (files: File[]) => {
+    setUploading((n) => n + files.length);
+    const urls = await uploadAll(files, purpose, uploadRef);
+    setUploading((n) => n - files.length);
+    if (urls.length) onChange([...latest.current, ...urls].slice(0, max));
+  };
+
   return (
     <div>
       <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4">
@@ -114,14 +167,20 @@ export function MultiImageUpload({ images, onChange, max = 6, altBase }: { image
             </div>
           </li>
         ))}
+        {uploading > 0 && (
+          <li className="aspect-[4/5]">
+            <Uploading className="h-full" count={uploading} />
+          </li>
+        )}
         {remaining > 0 && (
           <li className="aspect-[4/5]">
-            <DropZone compact max={remaining} label="Add image" onFiles={(urls) => onChange([...images, ...urls])} className="h-full" />
+            <DropZone compact max={remaining} label="Add image" onFiles={add} className="h-full" />
           </li>
         )}
       </ul>
       <p className="mt-2 text-xs text-muted">
-        Up to {max} images, 4:5 portrait works best. JPG, PNG or WebP under 5 MB. Previews stay on this device (demo).
+        Up to {max} images, 4:5 portrait works best. JPG, PNG, WebP or AVIF under 5 MB. Images upload securely to the store&apos;s image
+        library; removed images are deleted when you save.
       </p>
     </div>
   );
@@ -135,6 +194,7 @@ export function SingleImageUpload({
   aspect = "aspect-[4/5]",
   hint,
   contain = false,
+  purpose = "category",
 }: {
   image: string | null;
   onChange: (image: string | null) => void;
@@ -143,10 +203,22 @@ export function SingleImageUpload({
   hint?: string;
   /** Show the whole image (logos) instead of cropping to fill. */
   contain?: boolean;
+  purpose?: UploadPurpose;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const replace = async (files: File[]) => {
+    if (!files[0]) return;
+    setUploading(true);
+    const [url] = await uploadAll([files[0]], purpose, undefined);
+    setUploading(false);
+    if (url) onChange(url);
+  };
+
+  if (uploading) return <Uploading className={aspect} />;
   if (!image) {
-    return <DropZone max={1} label="Upload image" hint={hint ?? "Drag & drop or click to browse"} onFiles={(urls) => onChange(urls[0])} className={aspect} />;
+    return <DropZone max={1} label="Upload image" hint={hint ?? "Drag & drop or click to browse"} onFiles={replace} className={aspect} />;
   }
   return (
     <div className={cn("group relative overflow-hidden rounded-xl border border-line", contain ? "bg-white" : "bg-sand", aspect)}>
@@ -167,13 +239,12 @@ export function SingleImageUpload({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp,image/avif"
         className="sr-only"
         tabIndex={-1}
         aria-hidden
         onChange={(e) => {
-          const [url] = readFiles(e.target.files, 1);
-          if (url) onChange(url);
+          void replace(pickFiles(e.target.files, 1));
           e.target.value = "";
         }}
       />

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { AUDIENCES, countLabel } from "@/data/audiences";
-import { getProductsByAudience } from "@/data/products";
+import { useCatalog } from "@/components/catalog/CatalogProvider";
 import { useAudienceStore } from "@/store/audience-store";
 import { ProductImage } from "@/components/ui/ProductImage";
 
@@ -21,6 +21,7 @@ const ALT: Record<string, string> = {
  */
 export function AudienceSelector() {
   const setAudience = useAudienceStore((s) => s.setAudience);
+  const { getProductsByAudience } = useCatalog();
 
   return (
     <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-4 md:grid-cols-[1.35fr_1fr_1fr_1fr] md:gap-5">

@@ -6,8 +6,10 @@ import { Footer } from "./Footer";
 import { Header } from "./Header";
 import { MobileMenu } from "./MobileMenu";
 import { SearchOverlay } from "./SearchOverlay";
+import { CatalogProvider } from "@/components/catalog/CatalogProvider";
 import { IntroGate } from "@/components/home/IntroGate";
 import { QuickAddModal } from "@/components/products/QuickAddModal";
+import { getCatalogSnapshot } from "@/server/services/catalog.service";
 import { AudienceTracker } from "@/store/audience-store";
 
 /**
@@ -15,9 +17,11 @@ import { AudienceTracker } from "@/store/audience-store";
  * announcement bar, header, footer and the global drawers/overlays.
  * Used by the (store) route-group layout and by the root 404 page — never by /admin.
  */
-export function StoreChrome({ children }: { children: ReactNode }) {
+export async function StoreChrome({ children }: { children: ReactNode }) {
+  // Catalogue from MongoDB (cached; refreshed when the admin edits products or categories).
+  const snapshot = await getCatalogSnapshot();
   return (
-    <>
+    <CatalogProvider snapshot={snapshot}>
       {/* Brand intro: plays once per session, only when landing on the homepage */}
       <IntroGate />
       <a
@@ -38,6 +42,6 @@ export function StoreChrome({ children }: { children: ReactNode }) {
       <SearchOverlay />
       <MobileMenu />
       <QuickAddModal />
-    </>
+    </CatalogProvider>
   );
 }

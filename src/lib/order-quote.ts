@@ -1,5 +1,4 @@
 import type { CartTotals, OrderItem, Product, Size } from "@/types";
-import { getProductById } from "@/data/products";
 import { calculateTotals } from "./pricing";
 
 /** What the browser is allowed to tell us about a line: which item, which variant, how many. Never the price. */
@@ -43,7 +42,8 @@ function parseLines(input: unknown): QuoteLineInput[] | null {
 export function quoteOrder(
   rawLines: unknown,
   rawCoupon: unknown,
-  lookup: (id: string) => Product | undefined = getProductById,
+  /** Resolves a product ID to live catalogue data — on the server, read fresh from MongoDB. */
+  lookup: (id: string) => Product | undefined,
 ): OrderQuote {
   const lines = parseLines(rawLines);
   if (!lines) return { ok: false, error: "Your bag looks invalid. Please refresh and try again." };
@@ -90,4 +90,10 @@ export function quoteOrder(
 /** Rupees → paise, the unit Razorpay works in. Prices are whole rupees in this store. */
 export function toPaise(rupees: number) {
   return Math.round(rupees * 100);
+}
+
+/** Product IDs mentioned in an untrusted bag payload (for loading them before quoting). */
+export function productIdsOf(rawLines: unknown): string[] {
+  if (!Array.isArray(rawLines)) return [];
+  return rawLines.flatMap((l) => (l && typeof l === "object" && typeof (l as { productId?: unknown }).productId === "string" ? [(l as { productId: string }).productId] : []));
 }

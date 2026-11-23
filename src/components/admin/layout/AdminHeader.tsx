@@ -261,8 +261,9 @@ function ProfileMenu() {
               <button
                 role="menuitem"
                 type="button"
-                onClick={() => {
-                  logout();
+                onClick={async () => {
+                  close();
+                  await logout();
                   toast.info("Signed out of the admin panel");
                   router.replace("/mm-hub/login");
                 }}

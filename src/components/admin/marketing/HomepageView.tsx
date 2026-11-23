@@ -78,6 +78,7 @@ function BannerForm({ banner, placement, onDone }: { banner: HomepageBanner | nu
             onChange={(img) => set("image", img ?? "")}
             alt={b.title || "Banner"}
             aspect={ASPECT[b.placement]}
+            purpose="banner"
             hint={b.placement === "hero" ? "Portrait, 4:5 · at least 1200px tall" : "Wide, 21:9 · at least 1600px wide"}
           />
           {errors.image && <p className="field-error">{errors.image}</p>}

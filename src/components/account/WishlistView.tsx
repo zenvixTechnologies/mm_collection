@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Heart, ShoppingBag, X } from "lucide-react";
 import { useState } from "react";
 import type { Product } from "@/types";
-import { getProductById } from "@/data/products";
+import { useCatalog } from "@/components/catalog/CatalogProvider";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { usePurchase } from "@/hooks/use-purchase";
 import { toast } from "@/store/ui-store";
@@ -24,6 +24,7 @@ export function WishlistView() {
   const ids = useWishlistStore((s) => s.ids);
   const remove = useWishlistStore((s) => s.remove);
   const [moving, setMoving] = useState<Product | null>(null);
+  const { getProductById } = useCatalog();
   const items = ids.map(getProductById).filter((p): p is Product => !!p);
 
   return (

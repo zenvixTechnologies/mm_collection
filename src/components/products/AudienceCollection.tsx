@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import type { Audience } from "@/types";
 import { getAudience } from "@/data/audiences";
-import { getProductsByAudience } from "@/data/products";
+import { getCatalog } from "@/server/services/catalog.service";
 import { CategoryGrid } from "@/components/home/CategoryGrid";
 import { AudienceHero } from "./AudienceHero";
 import { ShopView } from "./ShopView";
 
 /** Shared body of the /women, /men, /kids and /home-living collection pages. */
-export function AudienceCollection({ audience, sort }: { audience: Audience; sort?: string }) {
+export async function AudienceCollection({ audience, sort }: { audience: Audience; sort?: string }) {
   const info = getAudience(audience);
-  const list = getProductsByAudience(audience);
+  const list = (await getCatalog()).getProductsByAudience(audience);
   return (
     <ShopView
       key={audience}

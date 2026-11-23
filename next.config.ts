@@ -8,7 +8,10 @@ const nextConfig: NextConfig = {
     // Product photography is served from Unsplash's image CDN, which resizes on the fly.
     loader: "custom",
     loaderFile: "./src/lib/image-loader.ts",
-    remotePatterns: [{ protocol: "https", hostname: "images.unsplash.com" }],
+    remotePatterns: [
+      { protocol: "https", hostname: "images.unsplash.com" },
+      { protocol: "https", hostname: "res.cloudinary.com" },
+    ],
   },
 };
 

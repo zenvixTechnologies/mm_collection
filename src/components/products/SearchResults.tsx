@@ -6,8 +6,8 @@ import { Search, SearchX } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Audience } from "@/types";
 import { AUDIENCES } from "@/data/audiences";
-import { categoryFullName } from "@/data/categories";
-import { getBestSellers } from "@/data/products";
+import { useCatalog } from "@/components/catalog/CatalogProvider";
+import { categoryFullName } from "@/lib/catalog-query";
 import { cn } from "@/lib/utils";
 import { useActiveAudience } from "@/store/audience-store";
 import { POPULAR_SEARCHES, searchCategories, searchProducts, sortProducts, type SortValue } from "@/lib/catalog";
@@ -21,12 +21,13 @@ export function SearchResults({ initialQuery, scope }: { initialQuery: string; s
   const browsing = useActiveAudience();
   const [input, setInput] = useState(initialQuery);
   const [sort, setSort] = useState<SortValue>("featured");
-  const allMatches = useMemo(() => searchProducts(initialQuery), [initialQuery]);
+  const { products, categories, getBestSellers } = useCatalog();
+  const allMatches = useMemo(() => searchProducts(initialQuery, products, categories), [initialQuery, products, categories]);
   const results = useMemo(() => {
     const found = scope ? allMatches.filter((p) => p.audienceCategory === scope) : allMatches;
     return sort === "featured" ? found : sortProducts(found, sort);
   }, [allMatches, scope, sort]);
-  const matchedCategories = useMemo(() => searchCategories(initialQuery, 6), [initialQuery]);
+  const matchedCategories = useMemo(() => searchCategories(initialQuery, categories, 6), [initialQuery, categories]);
   const suggestFor = scope ?? browsing;
   // A new collection may have no best sellers yet — fall back to the whole store's.
   const bestSellers = getBestSellers(4, suggestFor).length ? getBestSellers(4, suggestFor) : getBestSellers(4);

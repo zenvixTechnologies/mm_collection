@@ -2,9 +2,8 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import type { Audience } from "@/types";
 import { countLabel, getAudience } from "@/data/audiences";
-import { getCategoriesByAudience } from "@/data/categories";
 import { IMG, portrait } from "@/data/images";
-import { getProductsByAudience, getProductsByCategory, getNewArrivals } from "@/data/products";
+import { getCatalog } from "@/server/services/catalog.service";
 import { cn } from "@/lib/utils";
 import { ProductImage } from "@/components/ui/ProductImage";
 import { Reveal } from "@/components/ui/Reveal";
@@ -25,7 +24,8 @@ interface CategoryGridProps {
   className?: string;
 }
 
-export function CategoryGrid({ variant = "home", audience = "women", includeAll = true, className }: CategoryGridProps) {
+export async function CategoryGrid({ variant = "home", audience = "women", includeAll = true, className }: CategoryGridProps) {
+  const { getCategoriesByAudience, getNewArrivals, getProductsByAudience, getProductsByCategory } = await getCatalog();
   const info = getAudience(audience);
   const tiles: Tile[] = [
     ...(includeAll

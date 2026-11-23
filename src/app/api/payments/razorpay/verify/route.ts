@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { STORE_CURRENCY, type PaymentMethod, type PaymentRecord } from "@/types";
-import { quoteOrder, toPaise } from "@/lib/order-quote";
+import { productIdsOf, quoteOrder, toPaise } from "@/lib/order-quote";
+import { loadProductsForCheckout } from "@/server/services/catalog.service";
 import {
   checkDomesticPayment,
   getRazorpayConfig,
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
     }
 
     // Re-price the same bag; it must match what Razorpay charged (which we set in step 1).
-    const quote = quoteOrder(body.items, body.couponCode);
+    const quote = quoteOrder(body.items, body.couponCode, await loadProductsForCheckout(productIdsOf(body.items)));
     if (!quote.ok || toPaise(quote.totals.total) !== order.amount) {
       console.error("[razorpay] amount mismatch", { orderId, paymentId, amount: order.amount });
       return NextResponse.json(

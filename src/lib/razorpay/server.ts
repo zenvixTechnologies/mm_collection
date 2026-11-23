@@ -6,6 +6,7 @@
  * it was made in INR with UPI, an Indian card or net banking, and Razorpay does not flag it as
  * international.
  */
+import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 const API = "https://api.razorpay.com/v1";

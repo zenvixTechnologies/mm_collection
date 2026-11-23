@@ -6,8 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, Heart, Menu, Search, ShoppingBag, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getAudience } from "@/data/audiences";
-import { getCategoriesByAudience } from "@/data/categories";
-import { getNewArrivals } from "@/data/products";
+import { useCatalog } from "@/components/catalog/CatalogProvider";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { cn } from "@/lib/utils";
 import { useActiveAudience } from "@/store/audience-store";
@@ -49,6 +48,7 @@ export function Header() {
   const [menuOpen, setCatMenuOpen] = useState(false);
   const closeTimer = useRef<number | undefined>(undefined);
   const audience = useActiveAudience();
+  const { getCategoriesByAudience, getNewArrivals } = useCatalog();
   const audienceInfo = getAudience(audience);
   const menuCategories = getCategoriesByAudience(audience);
   // A brand-new collection (e.g. Home & Living) has no arrivals yet — the promo card opens the collection instead.

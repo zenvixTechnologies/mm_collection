@@ -4,10 +4,10 @@ import { useSearchParams } from "next/navigation";
 import { AlertTriangle, Boxes, History, IndianRupee, Minus, PackageX, Plus, SlidersHorizontal } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import type { Audience } from "@/types";
-import type { AdminProduct, StockAdjustment } from "@/types/admin";
+import type { InventoryItem, StockAdjustment } from "@/types/admin";
 import { stockState, type StockState } from "@/lib/admin/metrics";
 import { cn, formatPrice } from "@/lib/utils";
-import { useAdminStore } from "@/store/admin-store";
+import { useAdminSession, useAdminStore } from "@/store/admin-store";
 import { toast } from "@/store/ui-store";
 import { Dialog } from "@/components/ui/Dialog";
 import { ProductImage } from "@/components/ui/ProductImage";
@@ -23,21 +23,33 @@ import { AUDIENCE_OPTIONS } from "./catalog-helpers";
 type Filter = "all" | StockState;
 const REASONS: StockAdjustment["reason"][] = ["Restock", "Return", "Correction", "Damaged", "Sale"];
 
-function AdjustDialog({ product, onClose }: { product: AdminProduct | null; onClose: () => void }) {
+/** "M · Ivory" — or nothing for single-variant products. */
+const variantLabel = (i: Pick<InventoryItem, "size" | "color">) => [i.size, i.color].filter(Boolean).join(" · ");
+
+/** Out of stock means nothing can be ordered (available = on hand − reserved). */
+const stateOf = (i: InventoryItem) => stockState({ stock: i.available, lowStockThreshold: i.lowStockThreshold });
+
+function AdjustDialog({ item, onClose }: { item: InventoryItem | null; onClose: () => void }) {
   const adjust = useAdminStore((s) => s.adjustStock);
   const [mode, setMode] = useState<"add" | "remove" | "set">("add");
   const [qty, setQty] = useState("");
   const [reason, setReason] = useState<StockAdjustment["reason"]>("Restock");
-  if (!product) return null;
+  const [saving, setSaving] = useState(false);
+  if (!item) return null;
   const n = Math.max(0, Math.floor(Number(qty) || 0));
-  const change = mode === "add" ? n : mode === "remove" ? -Math.min(n, product.stock) : n - product.stock;
-  const after = product.stock + change;
+  // Stock can't go below the units reserved by pending checkouts.
+  const floor = item.reserved;
+  const change = mode === "add" ? n : mode === "remove" ? -Math.min(n, item.stock - floor) : Math.max(n, floor) - item.stock;
+  const after = item.stock + change;
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (change === 0) return;
-    adjust(product.id, change, reason);
-    toast.success(`${product.name}: stock ${change > 0 ? "+" : ""}${change} → ${after}`);
+    setSaving(true);
+    const res = await adjust({ productId: item.productId, variantSku: item.sku, mode, quantity: mode === "remove" ? -change : mode === "set" ? after : n, reason });
+    setSaving(false);
+    if (!res.ok) return toast.error(res.error);
+    toast.success(`${item.productName}${variantLabel(item) ? ` (${variantLabel(item)})` : ""}: stock ${change > 0 ? "+" : ""}${change} → ${res.data.stock}`);
     onClose();
   };
 
@@ -46,12 +58,13 @@ function AdjustDialog({ product, onClose }: { product: AdminProduct | null; onCl
       <div className="space-y-4 px-5 py-5">
         <div className="flex items-center gap-3 rounded-xl bg-canvas p-3">
           <span className="relative h-14 w-11 shrink-0 overflow-hidden rounded-lg bg-sand">
-            {product.images[0] && <ProductImage src={product.images[0]} alt="" fill sizes="44px" unoptimized={product.images[0].startsWith("blob:")} />}
+            {item.image && <ProductImage src={item.image} alt="" fill sizes="44px" />}
           </span>
           <div className="min-w-0">
-            <p className="truncate font-semibold">{product.name}</p>
+            <p className="truncate font-semibold">{item.productName}</p>
             <p className="text-xs text-muted">
-              {product.sku} · {product.stock} in stock
+              {[variantLabel(item), item.sku].filter(Boolean).join(" · ")} · {item.stock} in stock
+              {item.reserved > 0 && ` (${item.reserved} reserved)`}
             </p>
           </div>
         </div>
@@ -85,43 +98,48 @@ function AdjustDialog({ product, onClose }: { product: AdminProduct | null; onCl
         <p className="rounded-xl border border-line px-4 py-3 text-sm">
           Stock after adjustment:{" "}
           <strong className="tabular-nums">
-            {product.stock} → {after}
+            {item.stock} → {after}
           </strong>
-          {after <= product.lowStockThreshold && <span className="ml-2 text-warning">(at or below alert level)</span>}
+          {after - item.reserved <= item.lowStockThreshold && <span className="ml-2 text-warning">(at or below alert level)</span>}
+          {floor > 0 && <span className="mt-1 block text-xs text-muted">{floor} reserved by pending checkouts — stock can&apos;t go below that.</span>}
         </p>
       </div>
       <div className="flex flex-col-reverse gap-2 border-t border-line px-5 py-4 sm:flex-row sm:justify-end">
         <button type="button" onClick={onClose} className="btn-ghost btn-sm">
           Cancel
         </button>
-        <button type="submit" disabled={change === 0} className="btn-primary btn-sm">
-          Save adjustment
+        <button type="submit" disabled={change === 0 || saving} className="btn-primary btn-sm">
+          {saving ? "Saving…" : "Save adjustment"}
         </button>
       </div>
     </form>
   );
 }
 
-function ThresholdInput({ product }: { product: AdminProduct }) {
+function ThresholdInput({ item, disabled }: { item: InventoryItem; disabled: boolean }) {
   const setThreshold = useAdminStore((s) => s.setLowStockThreshold);
-  const [v, setV] = useState(String(product.lowStockThreshold));
-  const commit = () => {
+  const [v, setV] = useState(String(item.lowStockThreshold));
+  const commit = async () => {
     const n = Math.max(0, Math.floor(Number(v) || 0));
     setV(String(n));
-    if (n !== product.lowStockThreshold) {
-      setThreshold(product.id, n);
-      toast.success(`Alert level for ${product.name} set to ${n}`);
+    if (n === item.lowStockThreshold) return;
+    const res = await setThreshold(item.productId, item.sku, n);
+    if (!res.ok) {
+      setV(String(item.lowStockThreshold));
+      return toast.error(res.error);
     }
+    toast.success(`Alert level for ${item.productName}${variantLabel(item) ? ` (${variantLabel(item)})` : ""} set to ${n}`);
   };
   return (
     <input
       type="number"
       min={0}
       value={v}
+      disabled={disabled}
       onChange={(e) => setV(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
-      aria-label={`Low-stock alert level for ${product.name}`}
+      aria-label={`Low-stock alert level for ${item.productName} ${variantLabel(item)}`}
       className="field-input field-sm h-9 w-16 text-center tabular-nums"
     />
   );
@@ -129,46 +147,57 @@ function ThresholdInput({ product }: { product: AdminProduct }) {
 
 export function InventoryView() {
   const params = useSearchParams();
-  const products = useAdminStore((s) => s.products);
+  const items = useAdminStore((s) => s.inventory);
+  const loading = useAdminStore((s) => s.catalogStatus === "loading" || s.catalogStatus === "idle");
   const adjustments = useAdminStore((s) => s.stockAdjustments);
   const adjust = useAdminStore((s) => s.adjustStock);
+  const canWrite = useAdminSession((s) => s.can("inventory:write"));
   const initial = params.get("filter");
   const [filter, setFilter] = useState<Filter>(initial === "low" || initial === "out" || initial === "in" ? initial : "all");
   const [q, setQ] = useState("");
   const [audience, setAudience] = useState<"all" | Audience>("all");
-  const [adjusting, setAdjusting] = useState<AdminProduct | null>(null);
+  const [adjusting, setAdjusting] = useState<InventoryItem | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
 
-  const tracked = useMemo(() => products.filter((p) => p.status !== "archived"), [products]);
+  const tracked = useMemo(() => items.filter((i) => i.status !== "archived"), [items]);
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     return tracked.filter(
-      (p) =>
-        (filter === "all" || stockState(p) === filter) &&
-        (audience === "all" || p.audienceCategory === audience) &&
-        (!term || p.name.toLowerCase().includes(term) || p.sku.toLowerCase().includes(term)),
+      (i) =>
+        (filter === "all" || stateOf(i) === filter) &&
+        (audience === "all" || i.audienceCategory === audience) &&
+        (!term || i.productName.toLowerCase().includes(term) || i.sku.toLowerCase().includes(term) || variantLabel(i).toLowerCase().includes(term)),
     );
   }, [tracked, filter, audience, q]);
 
-  const units = tracked.reduce((s, p) => s + p.stock, 0);
-  const value = tracked.reduce((s, p) => s + p.stock * p.price, 0);
-  const low = tracked.filter((p) => stockState(p) === "low").length;
-  const out = tracked.filter((p) => stockState(p) === "out").length;
+  const units = tracked.reduce((s, i) => s + i.stock, 0);
+  const value = tracked.reduce((s, i) => s + i.stock * i.price, 0);
+  const low = tracked.filter((i) => stateOf(i) === "low").length;
+  const out = tracked.filter((i) => stateOf(i) === "out").length;
+  const productCount = new Set(tracked.map((i) => i.productId)).size;
 
-  const columns: Column<AdminProduct>[] = [
+  const quick = async (i: InventoryItem, change: 1 | -1) => {
+    setBusy(i.id);
+    const res = await adjust({ productId: i.productId, variantSku: i.sku, mode: change > 0 ? "add" : "remove", quantity: 1, reason: change > 0 ? "Restock" : "Correction" });
+    setBusy(null);
+    if (!res.ok) toast.error(res.error);
+  };
+
+  const columns: Column<InventoryItem>[] = [
     {
       id: "name",
       header: "Product",
-      sortValue: (p) => p.name,
-      cell: (p) => (
+      sortValue: (i) => `${i.productName} ${variantLabel(i)}`,
+      cell: (i) => (
         <div className="flex min-w-[200px] items-center gap-3">
           <span className="relative h-12 w-10 shrink-0 overflow-hidden rounded-lg bg-sand">
-            {p.images[0] && <ProductImage src={p.images[0]} alt="" fill sizes="40px" unoptimized={p.images[0].startsWith("blob:")} />}
+            {i.image && <ProductImage src={i.image} alt="" fill sizes="40px" />}
           </span>
           <span className="min-w-0">
-            <span className="block max-w-[260px] truncate font-semibold">{p.name}</span>
+            <span className="block max-w-[260px] truncate font-semibold">{i.productName}</span>
             <span className="text-xs text-muted">
-              {p.sku}
-              <span className="font-semibold text-ink sm:hidden"> · {p.stock} on hand</span>
+              {[variantLabel(i), i.sku].filter(Boolean).join(" · ")}
+              <span className="font-semibold text-ink sm:hidden"> · {i.stock} on hand</span>
             </span>
           </span>
         </div>
@@ -177,49 +206,65 @@ export function InventoryView() {
     {
       id: "stock",
       header: "On hand",
-      sortValue: (p) => p.stock,
-      cell: (p) => {
-        const state = stockState(p);
-        const pct = Math.min(100, (p.stock / Math.max(1, p.lowStockThreshold * 4)) * 100);
+      sortValue: (i) => i.available,
+      cell: (i) => {
+        const state = stateOf(i);
+        const pct = Math.min(100, (i.available / Math.max(1, i.lowStockThreshold * 4)) * 100);
         return (
           <div className="flex min-w-[130px] items-center gap-3">
-            <span className="w-7 text-right font-semibold tabular-nums">{p.stock}</span>
+            <span className="w-7 text-right font-semibold tabular-nums" title={i.reserved ? `${i.reserved} reserved by pending checkouts` : undefined}>
+              {i.stock}
+            </span>
             <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-sand" aria-hidden>
               <span
                 className={cn("block h-full rounded-full", state === "out" ? "bg-danger" : state === "low" ? "bg-gold" : "bg-success")}
                 style={{ width: `${Math.max(state === "out" ? 0 : 4, pct)}%` }}
               />
             </span>
+            {i.reserved > 0 && <span className="text-[11px] whitespace-nowrap text-muted">{i.reserved} held</span>}
           </div>
         );
       },
     },
-    { id: "threshold", header: "Alert at", hideBelow: "md", sortValue: (p) => p.lowStockThreshold, cell: (p) => <ThresholdInput key={`${p.id}-${p.lowStockThreshold}`} product={p} /> },
-    { id: "state", header: "Status", hideBelow: "sm", sortValue: (p) => ["out", "low", "in"].indexOf(stockState(p)), cell: (p) => <StockBadge state={stockState(p)} /> },
-    { id: "value", header: "Stock value", align: "right", hideBelow: "xl", sortValue: (p) => p.stock * p.price, cell: (p) => <span className="tabular-nums">{formatPrice(p.stock * p.price)}</span> },
+    {
+      id: "threshold",
+      header: "Alert at",
+      hideBelow: "md",
+      sortValue: (i) => i.lowStockThreshold,
+      cell: (i) => <ThresholdInput key={`${i.id}-${i.lowStockThreshold}`} item={i} disabled={!canWrite} />,
+    },
+    { id: "state", header: "Status", hideBelow: "sm", sortValue: (i) => ["out", "low", "in"].indexOf(stateOf(i)), cell: (i) => <StockBadge state={stateOf(i)} /> },
+    { id: "value", header: "Stock value", align: "right", hideBelow: "xl", sortValue: (i) => i.stock * i.price, cell: (i) => <span className="tabular-nums">{formatPrice(i.stock * i.price)}</span> },
     {
       id: "adjust",
       header: <span className="sr-only">Adjust</span>,
       align: "right",
-      cell: (p) => (
-        <div className="flex items-center justify-end gap-1">
-          <button
-            type="button"
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-line text-ink hover:bg-sand disabled:opacity-40"
-            disabled={p.stock === 0}
-            onClick={() => adjust(p.id, -1, "Correction")}
-            aria-label={`Remove one ${p.name}`}
-          >
-            <Minus size={14} />
-          </button>
-          <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full border border-line text-ink hover:bg-sand" onClick={() => adjust(p.id, 1, "Restock")} aria-label={`Add one ${p.name}`}>
-            <Plus size={14} />
-          </button>
-          <button type="button" className="btn-outline btn-sm ml-1 hidden min-h-8 px-3 sm:inline-flex" onClick={() => setAdjusting(p)}>
-            <SlidersHorizontal size={14} aria-hidden /> Adjust
-          </button>
-        </div>
-      ),
+      cell: (i) =>
+        canWrite ? (
+          <div className="flex items-center justify-end gap-1">
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-line text-ink hover:bg-sand disabled:opacity-40"
+              disabled={i.stock - i.reserved <= 0 || busy === i.id}
+              onClick={() => quick(i, -1)}
+              aria-label={`Remove one ${i.productName} ${variantLabel(i)}`}
+            >
+              <Minus size={14} />
+            </button>
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-line text-ink hover:bg-sand disabled:opacity-40"
+              disabled={busy === i.id}
+              onClick={() => quick(i, 1)}
+              aria-label={`Add one ${i.productName} ${variantLabel(i)}`}
+            >
+              <Plus size={14} />
+            </button>
+            <button type="button" className="btn-outline btn-sm ml-1 hidden min-h-8 px-3 sm:inline-flex" onClick={() => setAdjusting(i)}>
+              <SlidersHorizontal size={14} aria-hidden /> Adjust
+            </button>
+          </div>
+        ) : null,
     },
   ];
 
@@ -228,14 +273,14 @@ export function InventoryView() {
       <PageHeader
         breadcrumbs={[{ label: "Inventory" }]}
         title="Inventory"
-        description="Keep stock accurate, set alert levels per product and restock before items sell out."
+        description="Stock is tracked per size and colour. Keep it accurate, set alert levels and restock before items sell out."
       />
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard label="Units in stock" value={formatNumber(units)} icon={<Boxes size={18} />} hint={`${tracked.length} products`} />
+        <StatCard label="Units in stock" value={formatNumber(units)} icon={<Boxes size={18} />} hint={`${productCount} products · ${tracked.length} variants`} />
         <StatCard label="Stock value (retail)" value={formatCompactPrice(value)} icon={<IndianRupee size={18} />} tone="gold" hint={formatPrice(value)} />
-        <StatCard label="Low stock" value={low} icon={<AlertTriangle size={18} />} tone="royal" hint="at or below alert level" />
-        <StatCard label="Out of stock" value={out} icon={<PackageX size={18} />} tone="accent" hint="can't be ordered" />
+        <StatCard label="Low stock" value={low} icon={<AlertTriangle size={18} />} tone="royal" hint="variants at or below alert level" />
+        <StatCard label="Out of stock" value={out} icon={<PackageX size={18} />} tone="accent" hint="variants that can't be ordered" />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
@@ -254,7 +299,7 @@ export function InventoryView() {
             />
           </div>
           <Toolbar className="p-4">
-            <SearchInput value={q} onChange={setQ} placeholder="Search by name or SKU" label="Search inventory" className="sm:max-w-xs sm:flex-1" />
+            <SearchInput value={q} onChange={setQ} placeholder="Search by name, SKU, size or colour" label="Search inventory" className="sm:max-w-xs sm:flex-1" />
             <FilterSelect
               label="Main category"
               value={audience}
@@ -266,11 +311,17 @@ export function InventoryView() {
             caption="Stock levels"
             rows={filtered}
             columns={columns}
-            getRowId={(p) => p.id}
+            getRowId={(i) => i.id}
             resetKey={`${filter}|${q}|${audience}`}
             pageSize={12}
             initialSort={{ id: "stock", dir: "asc" }}
-            empty={<TableEmpty icon={<Boxes size={24} />} title="Nothing here" description={filter === "out" ? "No products are out of stock." : "No products match."} />}
+            empty={
+              <TableEmpty
+                icon={<Boxes size={24} />}
+                title={loading ? "Loading stock…" : "Nothing here"}
+                description={loading ? "Fetching the latest stock levels." : filter === "out" ? "No variants are out of stock." : "No variants match."}
+              />
+            }
           />
         </div>
 
@@ -298,18 +349,19 @@ export function InventoryView() {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{a.productName}</span>
                   <span className="block text-xs text-muted">
-                    {a.reason} · now {a.stockAfter} · {a.by}
+                    {a.sku} · {a.reason} · now {a.stockAfter} · {a.by}
                   </span>
                 </span>
                 <span className="shrink-0 text-xs text-subtle">{timeAgo(a.at)}</span>
               </li>
             ))}
+            {!adjustments.length && <li className="px-5 py-6 text-sm text-muted">No stock changes yet.</li>}
           </ul>
         </Panel>
       </div>
 
       <Dialog open={adjusting !== null} onClose={() => setAdjusting(null)} title="Adjust stock">
-        <AdjustDialog key={adjusting?.id} product={adjusting} onClose={() => setAdjusting(null)} />
+        <AdjustDialog key={adjusting?.id} item={adjusting} onClose={() => setAdjusting(null)} />
       </Dialog>
     </>
   );

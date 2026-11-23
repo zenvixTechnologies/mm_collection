@@ -53,21 +53,21 @@ describe("main categories", () => {
 
 describe("searchCategories", () => {
   it("finds a Home & Living sub-category by name, singular or plural", () => {
-    expect(searchCategories("bedsheets").map((c) => c.id)).toEqual(["home-bedsheets"]);
-    expect(searchCategories("blanket").map((c) => c.id)).toEqual(["home-blankets"]);
-    expect(searchCategories("cushion cover").map((c) => c.id)).toEqual(["home-cushion-covers"]);
+    expect(searchCategories("bedsheets", categories).map((c) => c.id)).toEqual(["home-bedsheets"]);
+    expect(searchCategories("blanket", categories).map((c) => c.id)).toEqual(["home-blankets"]);
+    expect(searchCategories("cushion cover", categories).map((c) => c.id)).toEqual(["home-cushion-covers"]);
   });
 
   it("finds all Home & Living sub-categories from the main category's keywords", () => {
-    expect(searchCategories("bedding").map((c) => c.audience)).toEqual(Array(4).fill("home-living"));
+    expect(searchCategories("bedding", categories).map((c) => c.audience)).toEqual(Array(4).fill("home-living"));
   });
 
   it("does not let 'men' match women's categories", () => {
-    expect(searchCategories("men", 50).every((c) => c.audience === "men")).toBe(true);
+    expect(searchCategories("men", categories, 50).every((c) => c.audience === "men")).toBe(true);
   });
 
   it("ignores empty and single-letter queries", () => {
-    expect(searchCategories("")).toEqual([]);
-    expect(searchCategories("a")).toEqual([]);
+    expect(searchCategories("", categories)).toEqual([]);
+    expect(searchCategories("a", categories)).toEqual([]);
   });
 });

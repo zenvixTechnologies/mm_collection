@@ -8,7 +8,8 @@ import { POPULAR_SEARCHES, searchCategories, searchProducts } from "@/lib/catalo
 import { formatPrice } from "@/lib/utils";
 import { useUIStore } from "@/store/ui-store";
 import { getAudience } from "@/data/audiences";
-import { categoryFullName, getCategoriesByAudience } from "@/data/categories";
+import { useCatalog } from "@/components/catalog/CatalogProvider";
+import { categoryFullName } from "@/lib/catalog-query";
 import { useActiveAudience } from "@/store/audience-store";
 import { Dialog } from "@/components/ui/Dialog";
 import { ProductImage } from "@/components/ui/ProductImage";
@@ -21,8 +22,9 @@ export function SearchOverlay() {
   const [query, setQuery] = useState("");
   const audience = useActiveAudience();
   const deferred = useDeferredValue(query);
-  const results = useMemo(() => searchProducts(deferred).slice(0, 6), [deferred]);
-  const matchedCategories = useMemo(() => searchCategories(deferred), [deferred]);
+  const { products, categories, getCategoriesByAudience } = useCatalog();
+  const results = useMemo(() => searchProducts(deferred, products, categories).slice(0, 6), [deferred, products, categories]);
+  const matchedCategories = useMemo(() => searchCategories(deferred, categories), [deferred, categories]);
 
   useEffect(() => setOpen(false), [pathname, setOpen]);
   useEffect(() => {

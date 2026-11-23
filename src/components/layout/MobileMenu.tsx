@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, Heart, Package, Phone, Truck, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getAudience } from "@/data/audiences";
-import { getCategoriesByAudience } from "@/data/categories";
+import { useCatalog } from "@/components/catalog/CatalogProvider";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { cn, SITE } from "@/lib/utils";
 import { useActiveAudience } from "@/store/audience-store";
@@ -26,6 +26,7 @@ export function MobileMenu() {
   const wishCount = useWishlistStore((s) => s.ids.length);
   const [catsOpen, setCatsOpen] = useState(false);
   const audience = useActiveAudience();
+  const { getCategoriesByAudience } = useCatalog();
   const audienceInfo = getAudience(audience);
 
   useEffect(() => setOpen(false), [pathname, setOpen]);

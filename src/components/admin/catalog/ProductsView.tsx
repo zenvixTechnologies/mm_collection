@@ -30,6 +30,13 @@ export function ProductsView() {
   const categories = useAdminStore((s) => s.categories);
   const deleteProducts = useAdminStore((s) => s.deleteProducts);
   const setProductStatus = useAdminStore((s) => s.setProductStatus);
+  const changeStatus = (ids: string[], status: ProductStatus, done: string) =>
+    void setProductStatus(ids, status).then((r) => {
+      if (!r.ok) return toast.error(r.error);
+      setSelected([]);
+      if (r.data.skipped.length) toast.info(`${done}. Skipped ${r.data.skipped.length} without images: ${r.data.skipped.slice(0, 3).join(", ")}`);
+      else toast.success(done);
+    });
 
   const [tab, setTab] = useState<StatusTab>("all");
   const [q, setQ] = useState(params.get("q") ?? "");
@@ -265,13 +272,13 @@ export function ProductsView() {
           initialSort={{ id: "updated", dir: "desc" }}
           bulkActions={(ids) => (
             <>
-              <button type="button" className="btn-light btn-sm min-h-8 border border-line" onClick={() => { setProductStatus(ids, "active"); setSelected([]); toast.success("Published"); }}>
+              <button type="button" className="btn-light btn-sm min-h-8 border border-line" onClick={() => changeStatus(ids, "active", "Published")}>
                 <Eye size={14} aria-hidden /> Publish
               </button>
-              <button type="button" className="btn-light btn-sm min-h-8 border border-line" onClick={() => { setProductStatus(ids, "draft"); setSelected([]); toast.success("Moved to drafts"); }}>
+              <button type="button" className="btn-light btn-sm min-h-8 border border-line" onClick={() => changeStatus(ids, "draft", "Moved to drafts")}>
                 <EyeOff size={14} aria-hidden /> Unpublish
               </button>
-              <button type="button" className="btn-light btn-sm min-h-8 border border-line" onClick={() => { setProductStatus(ids, "archived"); setSelected([]); toast.success("Archived"); }}>
+              <button type="button" className="btn-light btn-sm min-h-8 border border-line" onClick={() => changeStatus(ids, "archived", "Archived")}>
                 <Archive size={14} aria-hidden /> Archive
               </button>
               <button type="button" className="btn btn-sm min-h-8 bg-danger text-white hover:bg-accent-dark" onClick={() => setConfirmIds(ids)}>
@@ -314,9 +321,12 @@ export function ProductsView() {
         confirmLabel="Delete"
         onConfirm={() => {
           if (!confirmIds) return;
-          deleteProducts(confirmIds);
-          setSelected((s) => s.filter((id) => !confirmIds.includes(id)));
-          toast.success(confirmIds.length > 1 ? `Deleted ${confirmIds.length} products` : "Product deleted");
+          const ids = confirmIds;
+          void deleteProducts(ids).then((r) => {
+            if (!r.ok) return toast.error(r.error);
+            setSelected((s) => s.filter((id) => !ids.includes(id)));
+            toast.success(ids.length > 1 ? `Deleted ${ids.length} products` : "Product deleted");
+          });
         }}
       />
     </>

@@ -15,7 +15,6 @@ import {
   Mail,
 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
-import { DEMO_ADMIN } from "@/data/admin/settings";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { useAdminSession } from "@/store/admin-store";
 import { cn } from "@/lib/utils";
@@ -109,7 +108,8 @@ export function AdminLoginView() {
   const router = useRouter();
   const params = useSearchParams();
   const hydrated = useHydrated();
-  const user = useAdminSession((s) => s.user);
+  const status = useAdminSession((s) => s.status);
+  const load = useAdminSession((s) => s.load);
   const login = useAdminSession((s) => s.login);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -119,35 +119,31 @@ export function AdminLoginView() {
   const next = safeNext(params.get("next"));
   const reduceMotion = useReducedMotion();
 
+  // Already signed in (or the refresh cookie is still valid)? Go straight back to the panel.
   useEffect(() => {
-    if (hydrated && user) router.replace(next);
-  }, [hydrated, user, router, next]);
+    if (hydrated && status === "unknown") void load();
+  }, [hydrated, status, load]);
+  useEffect(() => {
+    if (status === "authenticated") router.replace(next);
+  }, [status, router, next]);
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     if (!email.trim() || !password) {
-      setError("Enter your email and password.");
+      setError("Enter your username or email, and your password.");
       return;
     }
     setBusy(true);
-    // Small delay so the demo feels like a real sign-in round trip.
-    window.setTimeout(() => {
-      const res = login(email, password);
-      setBusy(false);
-      if (!res.ok) {
-        setError(res.error);
-        return;
-      }
-      toast.success("Welcome back to M&M Admin Studio");
-      router.replace(next);
-    }, 450);
-  };
-
-  const fillDemo = () => {
-    setEmail(DEMO_ADMIN.email);
-    setPassword(DEMO_ADMIN.password);
-    setError(null);
+    const res = await login(email, password);
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.error);
+      setPassword("");
+      return;
+    }
+    toast.success("Welcome back to M&M Admin Studio");
+    router.replace(next);
   };
 
   return (
@@ -210,20 +206,22 @@ export function AdminLoginView() {
             <form onSubmit={submit} className="mt-7 space-y-5" noValidate>
               <div>
                 <label htmlFor="admin-email" className="field-label">
-                  Email address
+                  Username or email
                 </label>
                 <div className="relative">
                   <Mail size={17} className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-subtle" aria-hidden />
                   <input
                     id="admin-email"
-                    type="email"
+                    type="text"
                     autoComplete="username"
+                    autoCapitalize="none"
+                    spellCheck={false}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="field-input pl-11"
                     aria-invalid={error ? true : undefined}
                     aria-describedby={error ? "admin-login-error" : undefined}
-                    placeholder="you@mmcollections.in"
+                    placeholder="Username or you@example.com"
                   />
                 </div>
               </div>
@@ -289,20 +287,11 @@ export function AdminLoginView() {
               </button>
             </form>
 
-            {/* Demo access — one quiet line instead of a separate panel */}
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-2xl bg-gold-soft px-4 py-3 text-center text-[13px]">
-              <span className="text-muted">
-                Demo: {DEMO_ADMIN.email} · {DEMO_ADMIN.password}
-              </span>
-              <button type="button" onClick={fillDemo} className="font-semibold text-gold-dark underline-offset-4 hover:underline">
-                Fill in
-              </button>
-            </div>
           </motion.div>
         </main>
 
         <footer className="relative px-4 pb-6 text-center text-xs text-subtle">
-          Frontend preview — real admin authentication will be added with the backend.
+          Staff access only. Sign-in attempts are logged, and accounts lock after repeated failures.
         </footer>
       </div>
     </div>

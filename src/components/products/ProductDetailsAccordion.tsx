@@ -5,10 +5,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Minus, Plus } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import type { Product } from "@/types";
-import { getCategory } from "@/data/categories";
+import { useCatalog } from "@/components/catalog/CatalogProvider";
 import { DELIVERY_DISCLAIMER, DELIVERY_ZONES, UNDERGARMENT_RETURN_POLICY, formatDeliveryZone, isUndergarment } from "@/lib/policies";
 
 export function ProductDetailsAccordion({ product }: { product: Product }) {
+  const { getCategory } = useCatalog();
   const undergarment = isUndergarment(product);
   const items: { id: string; title: string; content: ReactNode }[] = [
     {

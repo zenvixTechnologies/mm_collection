@@ -4,9 +4,10 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { PackageOpen, Search, SearchX, SlidersHorizontal, X } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
-import type { Audience, Product } from "@/types";
+import type { Audience, Category, Product } from "@/types";
 import { AUDIENCES, getAudience } from "@/data/audiences";
-import { categories, categoryFullName, getCategoriesByAudience } from "@/data/categories";
+import { useCatalog } from "@/components/catalog/CatalogProvider";
+import { categoryFullName } from "@/lib/catalog-query";
 import {
   EMPTY_FILTERS,
   applyFilters,
@@ -61,6 +62,7 @@ export function ShopView({
   hero,
   searchable = true,
 }: ShopViewProps) {
+  const { categories, getCategoriesByAudience } = useCatalog();
   const [sort, setSort] = useState<SortValue>(isSortValue(initialSort) ? initialSort : "featured");
   const [filters, setFilters] = useState<Filters>(() => {
     const cat = categories.find((c) => c.id === initialCategory);
@@ -94,8 +96,8 @@ export function ShopView({
     [products, filters.audiences],
   );
   const searched = useMemo(
-    () => (deferredQuery ? searchProducts(deferredQuery, products) : products),
-    [products, deferredQuery],
+    () => (deferredQuery ? searchProducts(deferredQuery, products, categories) : products),
+    [products, deferredQuery, categories],
   );
   const results = useMemo(() => sortProducts(applyFilters(searched, filters), sort), [searched, filters, sort]);
   const activeCount = countActiveFilters(filters);
@@ -139,7 +141,7 @@ export function ShopView({
     setQuery("");
   };
 
-  const chips = buildChips(filters);
+  const chips = buildChips(filters, categories);
   const shown = results.slice(0, visible);
 
   const loadMore = () => {
@@ -395,7 +397,7 @@ interface Chip {
   remove: (f: Filters) => Filters;
 }
 
-function buildChips(f: Filters): Chip[] {
+function buildChips(f: Filters, categories: Category[]): Chip[] {
   const chips: Chip[] = [];
   f.audiences.forEach((a) =>
     chips.push({

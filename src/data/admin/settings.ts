@@ -1,4 +1,4 @@
-import type { AdminUser, ShippingSettings, StoreSettings } from "@/types/admin";
+import type { ShippingSettings, StoreSettings } from "@/types/admin";
 import { SITE } from "@/lib/utils";
 
 export const mockStoreSettings: StoreSettings = {
@@ -41,17 +41,4 @@ export const mockShippingSettings: ShippingSettings = {
     { id: "dtdc", name: "DTDC", trackingUrlTemplate: "https://www.dtdc.in/tracking.asp?awb={awb}", enabled: true },
     { id: "indiapost", name: "India Post", trackingUrlTemplate: "https://www.indiapost.gov.in/track?id={awb}", enabled: false },
   ],
-};
-
-/** Demo-only admin account. Real admin authentication comes with the backend. */
-export const DEMO_ADMIN = {
-  email: "admin@mmcollections.in",
-  password: "admin123",
-};
-
-export const mockAdminUser: AdminUser = {
-  name: "Maria Mathew",
-  email: DEMO_ADMIN.email,
-  role: "Owner",
-  avatarInitials: "MM",
 };

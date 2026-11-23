@@ -147,11 +147,5 @@ export function getCategoriesByAudience(audience: Audience) {
   return categories.filter((c) => c.audience === audience);
 }
 
-/**
- * Name that stays unambiguous outside its audience — "Men's Shirts", "Kids' T-Shirts", "Dresses", "Bedsheets".
- * Shared with the admin, whose categories use the same audience + name shape.
- */
-export function categoryFullName(c: Pick<Category, "audience" | "name">) {
-  if (c.audience === "women" || c.audience === "home-living" || /^(men|kids)/i.test(c.name)) return c.name;
-  return `${c.audience === "men" ? "Men's" : "Kids'"} ${c.name}`;
-}
+/** Moved to the client-safe catalogue module; re-exported for existing imports. */
+export { categoryFullName } from "@/lib/catalog-query";

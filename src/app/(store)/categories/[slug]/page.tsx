@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAudience } from "@/data/audiences";
-import { categories, categoryFullName, getCategory } from "@/data/categories";
-import { getProductsByCategory } from "@/data/products";
+import { categoryFullName } from "@/lib/catalog-query";
+import { getCatalog } from "@/server/services/catalog.service";
 import { AudienceHero } from "@/components/products/AudienceHero";
 import { ShopView } from "@/components/products/ShopView";
 
@@ -11,13 +11,14 @@ type Props = {
   searchParams: Promise<{ sort?: string }>;
 };
 
-export function generateStaticParams() {
+export async function generateStaticParams() {
+  const { categories } = await getCatalog();
   return categories.map((c) => ({ slug: c.slug }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const category = getCategory(slug);
+  const category = (await getCatalog()).getCategory(slug);
   if (!category) return { title: "Category not found" };
   return {
     title:
@@ -33,6 +34,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function CategoryPage({ params, searchParams }: Props) {
   const { slug } = await params;
   const { sort } = await searchParams;
+  const { getCategory, getProductsByCategory } = await getCatalog();
   const category = getCategory(slug);
   if (!category) notFound();
   const info = getAudience(category.audience);

@@ -8,6 +8,11 @@ import type { ImageLoaderProps } from "next/image";
  * Local images (e.g. the fallback placeholder) are returned untouched.
  */
 export default function unsplashLoader({ src, width, quality }: ImageLoaderProps) {
+  // Cloudinary (admin uploads): resize to the requested width, best format (AVIF/WebP) and quality.
+  if (src.startsWith("https://res.cloudinary.com/") && src.includes("/image/upload/")) {
+    const q = quality ? `q_${quality}` : "q_auto";
+    return src.replace("/image/upload/", `/image/upload/f_auto,${q},c_limit,w_${width}/`);
+  }
   if (!src.startsWith("https://images.unsplash.com")) return src;
   const url = new URL(src);
   url.searchParams.set("w", String(width));

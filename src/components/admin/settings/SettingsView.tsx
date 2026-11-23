@@ -5,6 +5,7 @@ import { Bell, CreditCard, FileText, Info, KeyRound, RotateCcw, Store, UserCircl
 import { useState, type FormEvent, type ReactNode } from "react";
 import type { StoreSettings } from "@/types/admin";
 import { cn } from "@/lib/utils";
+import { adminApi, errorMessage } from "@/lib/admin-api";
 import { useAdminSession, useAdminStore } from "@/store/admin-store";
 import { toast } from "@/store/ui-store";
 import { Badge } from "../ui/Badge";
@@ -74,7 +75,7 @@ function StoreDetails() {
         <div className="grid gap-5 md:grid-cols-[160px_1fr]">
           <div>
             <p className="field-label">Logo</p>
-            <SingleImageUpload image={d.logo || null} onChange={(img) => set("logo", img ?? "")} alt="Store logo" aspect="aspect-square" hint="Square PNG or WebP" contain />
+            <SingleImageUpload image={d.logo || null} onChange={(img) => set("logo", img ?? "")} alt="Store logo" aspect="aspect-square" hint="Square PNG or WebP" contain purpose="logo" />
           </div>
           <div className="grid content-start gap-4 sm:grid-cols-2">
             <TextField label="Store name" required value={d.storeName} error={errors.storeName} onChange={(e) => set("storeName", e.target.value)} />
@@ -224,11 +225,22 @@ function Account() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (pw.next.length < 8) return setError("Use at least 8 characters.");
+            if (pw.next.length < 12) return setError("Use at least 12 characters, including a letter and a number.");
             if (pw.next !== pw.again) return setError("The new passwords don't match.");
             setError(null);
-            setPw({ current: "", next: "", again: "" });
-            toast.info("Password changes will work once admin accounts move to the backend.");
+            void adminApi<{ otherSessionsSignedOut: number }>("/auth/change-password", {
+              method: "POST",
+              body: { currentPassword: pw.current, newPassword: pw.next },
+            })
+              .then(({ data }) => {
+                setPw({ current: "", next: "", again: "" });
+                toast.success(
+                  data.otherSessionsSignedOut
+                    ? `Password updated. Signed out of ${data.otherSessionsSignedOut} other device${data.otherSessionsSignedOut === 1 ? "" : "s"}.`
+                    : "Password updated.",
+                );
+              })
+              .catch((err) => setError(errorMessage(err)));
           }}
           className="grid gap-4 sm:grid-cols-3"
           noValidate

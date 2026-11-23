@@ -1,9 +1,9 @@
 import type { MetadataRoute } from "next";
-import { categories } from "@/data/categories";
-import { products } from "@/data/products";
+import { getCatalog } from "@/server/services/catalog.service";
 import { SITE } from "@/lib/utils";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const { categories, products } = await getCatalog();
   const now = new Date();
   const staticRoutes = [
     "",

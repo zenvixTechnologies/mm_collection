@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { STORE_CURRENCY } from "@/types";
-import { quoteOrder, toPaise } from "@/lib/order-quote";
+import { productIdsOf, quoteOrder, toPaise } from "@/lib/order-quote";
+import { loadProductsForCheckout } from "@/server/services/catalog.service";
 import { RazorpayError, getRazorpayConfig, razorpayRequest, type RazorpayOrder } from "@/lib/razorpay/server";
 import { generateOrderId } from "@/lib/utils";
 import { parseCheckoutInput } from "@/lib/validation";
@@ -26,7 +27,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Please check your delivery details.", fields: details.errors }, { status: 400 });
   }
 
-  const quote = quoteOrder(body.items, body.couponCode);
+  // Prices and stock come fresh from MongoDB — never from the browser or a cache.
+  let lookup: Awaited<ReturnType<typeof loadProductsForCheckout>>;
+  try {
+    lookup = await loadProductsForCheckout(productIdsOf(body.items));
+  } catch (err) {
+    console.error("[checkout] catalogue unavailable", err);
+    return NextResponse.json({ error: "We couldn't load your bag right now. Please try again shortly." }, { status: 503 });
+  }
+  const quote = quoteOrder(body.items, body.couponCode, lookup);
   if (!quote.ok) return NextResponse.json({ error: quote.error }, { status: 409 });
 
   const receipt = generateOrderId();

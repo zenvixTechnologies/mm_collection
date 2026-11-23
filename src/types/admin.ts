@@ -30,16 +30,68 @@ export interface AdminProduct extends Omit<Product, "categoryId" | "tags"> {
   categoryId: string;
   tags: string[];
   status: ProductStatus;
-  /** Stock at or below this number is flagged as low stock. */
+  /** Stock at or below this number is flagged as low stock (sum of the variants' alert levels). */
   lowStockThreshold: number;
   updatedAt: string;
+  /** Size × colour variants with their own SKU and stock (from the API). */
+  variants?: AdminVariant[];
+  /** Image details matching `images` by position (Cloudinary public ID etc.). */
+  imageMeta?: AdminImage[];
+  /** Units held by unpaid checkouts. */
+  reserved?: number;
+}
+
+export interface AdminImage {
+  url: string;
+  publicId?: string | null;
+  width?: number | null;
+  height?: number | null;
+  alt?: string;
+}
+
+export interface AdminVariant {
+  sku: string;
+  size: string | null;
+  color: { name: string; hex: string } | null;
+  /** Units on hand (including reserved). */
+  stock: number;
+  reserved: number;
+  available: number;
+  lowStockThreshold: number;
+  isActive: boolean;
+  pricePaise: number;
+  mrpPaise: number;
+}
+
+/** One row of the inventory screen: a single variant of a product. */
+export interface InventoryItem {
+  id: string;
+  productId: string;
+  productName: string;
+  slug: string;
+  image: string | null;
+  audienceCategory: Audience;
+  status: ProductStatus;
+  sku: string;
+  size: string | null;
+  color: string | null;
+  stock: number;
+  reserved: number;
+  available: number;
+  lowStockThreshold: number;
+  /** Selling price in rupees, for stock value. */
+  price: number;
 }
 
 export interface AdminCategory extends Omit<Category, "id" | "slug"> {
+  /** The slug — the same identifier the storefront uses. */
   id: string;
   slug: string;
   visible: boolean;
   sortOrder: number;
+  /** Products whose main sub-category this is (from the API). */
+  productCount?: number;
+  imagePublicId?: string | null;
 }
 
 /* ---------- Orders, customers, payments ---------- */
@@ -231,9 +283,14 @@ export interface DailySales {
   orders: number;
 }
 
+/** The signed-in admin, as returned by GET /api/v1/admin/auth/me. */
 export interface AdminUser {
+  id: string;
   name: string;
   email: string;
-  role: "Owner" | "Manager" | "Staff";
+  /** Role display name: "Owner", "Manager", "Staff" or a custom role. */
+  role: string;
+  roleKey: string;
+  permissions: string[];
   avatarInitials: string;
 }

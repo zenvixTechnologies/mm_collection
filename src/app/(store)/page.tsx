@@ -1,4 +1,3 @@
-import { getBestSellers, getNewArrivals, getProductsByCategory } from "@/data/products";
 import { AudienceSelector } from "@/components/home/AudienceSelector";
 import { CategoryGrid } from "@/components/home/CategoryGrid";
 import { FeaturedCollections } from "@/components/home/FeaturedCollections";
@@ -11,12 +10,14 @@ import { WhyChoose } from "@/components/home/WhyChoose";
 import { ProductGrid } from "@/components/products/ProductGrid";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import Link from "next/link";
+import { getCatalog } from "@/server/services/catalog.service";
 
 /**
  * The homepage is the Women's experience — the brand's primary focus.
  * Men and Kids get one entry point ("Who are you shopping for?") rather than equal billing.
  */
-export default function HomePage() {
+export default async function HomePage() {
+  const { getBestSellers, getNewArrivals, getProductsByCategory } = await getCatalog();
   const newArrivals = getNewArrivals(8, "women");
   const bestSellers = getBestSellers(8, "women");
   const trendingDresses = [...getProductsByCategory("dresses")]

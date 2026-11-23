@@ -1,19 +1,21 @@
 "use client";
 
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
 import type {
   ActivityItem,
   AdminCategory,
   AdminCoupon,
   AdminCustomer,
+  AdminImage,
   AdminNotification,
   AdminOffer,
   AdminOrder,
   AdminOrderStatus,
   AdminProduct,
+  AdminUser,
   HomepageBanner,
   HomepageSection,
+  InventoryItem,
   PaymentTransaction,
   ProductStatus,
   ShipmentTracking,
@@ -21,19 +23,22 @@ import type {
   StockAdjustment,
   StoreSettings,
 } from "@/types/admin";
-import { mockActivity, mockNotifications, mockStockAdjustments } from "@/data/admin/activity";
-import { mockCategories, mockProducts } from "@/data/admin/catalog";
+import { mockActivity, mockNotifications } from "@/data/admin/activity";
 import { mockCustomers } from "@/data/admin/customers";
 import { mockBanners, mockCoupons, mockFeaturedProductIds, mockHomepageSections, mockOffers } from "@/data/admin/marketing";
 import { mockOrders, mockPayments } from "@/data/admin/orders";
-import { DEMO_ADMIN, mockAdminUser, mockShippingSettings, mockStoreSettings } from "@/data/admin/settings";
+import { mockShippingSettings, mockStoreSettings } from "@/data/admin/settings";
+import { adminApi, errorMessage, onAdminSignedOut, refreshAdminSession } from "@/lib/admin-api";
+
+import { rememberImages } from "@/lib/admin-upload";
 
 /**
- * ADMIN DEMO STATE — frontend only.
+ * ADMIN STATE. Every admin screen reads and writes through this store.
  *
- * Every admin screen reads and writes through this store. It starts from the mock data in
- * src/data/admin and keeps changes in memory (a page reload resets the demo). When the Node.js
- * API is ready, each action below becomes an API call; the components won't need to change.
+ * Catalogue data — products, categories, inventory and stock history — is loaded from and saved
+ * to the API (MongoDB). Modules not yet connected to the backend (orders, customers, payments,
+ * coupons, homepage, settings) still start from the sample data in src/data/admin and keep
+ * changes in memory.
  */
 
 let idSeq = 0;
@@ -53,6 +58,9 @@ interface AdminData {
   coupons: AdminCoupon[];
   offers: AdminOffer[];
   stockAdjustments: StockAdjustment[];
+  /** One row per product variant. */
+  inventory: InventoryItem[];
+  catalogStatus: "idle" | "loading" | "ready" | "error";
   banners: HomepageBanner[];
   featuredProductIds: string[];
   homepageSections: HomepageSection[];
@@ -63,16 +71,16 @@ interface AdminData {
 }
 
 interface AdminActions {
-  /* products */
-  saveProduct: (product: AdminProduct) => void;
-  deleteProducts: (ids: string[]) => void;
-  setProductStatus: (ids: string[], status: ProductStatus) => void;
-  adjustStock: (productId: string, change: number, reason: StockAdjustment["reason"]) => void;
-  setLowStockThreshold: (productId: string, threshold: number) => void;
-  /* categories */
-  saveCategory: (category: AdminCategory) => void;
-  deleteCategory: (id: string) => void;
-  moveCategory: (id: string, direction: -1 | 1) => void;
+  /* catalogue (API) */
+  loadCatalog: (force?: boolean) => Promise<Result>;
+  saveProduct: (payload: ProductPayload, existingId: string | null) => Promise<Result<AdminProduct>>;
+  deleteProducts: (ids: string[]) => Promise<Result>;
+  setProductStatus: (ids: string[], status: ProductStatus) => Promise<Result<{ skipped: string[] }>>;
+  adjustStock: (input: StockAdjustInput) => Promise<Result<InventoryItem>>;
+  setLowStockThreshold: (productId: string, variantSku: string, threshold: number) => Promise<Result>;
+  saveCategory: (category: AdminCategory, isNew: boolean, image?: AdminImage | null) => Promise<Result<AdminCategory>>;
+  deleteCategory: (id: string) => Promise<Result>;
+  moveCategory: (id: string, direction: -1 | 1) => Promise<Result>;
   /* orders */
   updateOrderStatus: (id: string, status: AdminOrderStatus) => void;
   setTracking: (id: string, tracking: ShipmentTracking) => void;
@@ -100,17 +108,66 @@ interface AdminActions {
   resetDemo: () => void;
 }
 
+export type Result<T = undefined> = { ok: true; data: T; message?: string } | { ok: false; error: string };
+
+/** Body of POST/PUT /api/v1/admin/products (money in paise). */
+export interface ProductPayload {
+  name: string;
+  slug: string;
+  sku: string;
+  audience: string;
+  category: string;
+  tags: string[];
+  shortDescription: string;
+  description: string;
+  images: AdminImage[];
+  pricePaise: number;
+  mrpPaise: number;
+  variants: { size: string | null; color: { name: string; hex: string } | null; initialStock?: number; lowStockThreshold: number }[];
+  fabric: string;
+  care: string[];
+  status: ProductStatus;
+  featured: boolean;
+  newArrival: boolean;
+  bestSeller: boolean;
+  weightGrams?: number;
+}
+
+export interface StockAdjustInput {
+  productId: string;
+  variantSku: string;
+  mode: "add" | "remove" | "set";
+  quantity: number;
+  reason: StockAdjustment["reason"];
+}
+
+/** Every page of a paginated admin list. */
+async function fetchAll<T>(path: string) {
+  const items: T[] = [];
+  for (let page = 1; page < 100; page++) {
+    const sep = path.includes("?") ? "&" : "?";
+    const res = await adminApi<T[]>(`${path}${sep}page=${page}&limit=500`);
+    items.push(...res.data);
+    if (!res.pagination || page >= res.pagination.totalPages) break;
+  }
+  return items;
+}
+
+const fail = (err: unknown) => ({ ok: false as const, error: errorMessage(err) });
+
 function initialData(): AdminData {
   // structuredClone so edits never leak into the shared mock modules.
   return structuredClone({
-    products: mockProducts,
-    categories: mockCategories,
+    products: [] as AdminProduct[],
+    categories: [] as AdminCategory[],
     orders: mockOrders,
     customers: mockCustomers,
     payments: mockPayments,
     coupons: mockCoupons,
     offers: mockOffers,
-    stockAdjustments: mockStockAdjustments,
+    stockAdjustments: [] as StockAdjustment[],
+    inventory: [] as InventoryItem[],
+    catalogStatus: "idle" as AdminData["catalogStatus"],
     banners: mockBanners,
     featuredProductIds: mockFeaturedProductIds,
     homepageSections: mockHomepageSections,
@@ -133,83 +190,175 @@ export const useAdminStore = create<AdminData & AdminActions>()((set, get) => {
       40,
     );
 
+  const refreshInventory = async () => {
+    try {
+      set({ inventory: (await adminApi<InventoryItem[]>("/inventory")).data });
+    } catch {
+      /* the next full load will catch up */
+    }
+  };
+  const refreshCategories = async () => {
+    try {
+      set({ categories: (await adminApi<AdminCategory[]>("/categories")).data });
+    } catch {
+      /* ignore */
+    }
+  };
+  const refreshMovements = async () => {
+    try {
+      set({ stockAdjustments: (await adminApi<StockAdjustment[]>("/inventory/movements?limit=40")).data });
+    } catch {
+      /* ignore */
+    }
+  };
+
   return {
     ...initialData(),
 
-    saveProduct: (product) => {
-      const exists = get().products.some((p) => p.id === product.id);
-      const saved = { ...product, updatedAt: now() };
-      set({
-        products: upsert(get().products, saved),
-        activity: log(exists ? "updated product" : "added product", product.name, "/mm-hub/products"),
-      });
+    loadCatalog: async (force = false) => {
+      const status = get().catalogStatus;
+      if (!force && (status === "loading" || status === "ready")) return { ok: true, data: undefined };
+      set({ catalogStatus: "loading" });
+      try {
+        const [products, categories, inventory, movements] = await Promise.all([
+          fetchAll<AdminProduct>("/products"),
+          adminApi<AdminCategory[]>("/categories"),
+          adminApi<InventoryItem[]>("/inventory"),
+          adminApi<StockAdjustment[]>("/inventory/movements?limit=40"),
+        ]);
+        products.forEach((p) => rememberImages(p.imageMeta));
+        set({ products, categories: categories.data, inventory: inventory.data, stockAdjustments: movements.data, catalogStatus: "ready" });
+        return { ok: true, data: undefined };
+      } catch (err) {
+        set({ catalogStatus: "error" });
+        return fail(err);
+      }
     },
-    deleteProducts: (ids) => {
-      const names = get().products.filter((p) => ids.includes(p.id)).map((p) => p.name);
-      set({
-        products: get().products.filter((p) => !ids.includes(p.id)),
-        featuredProductIds: get().featuredProductIds.filter((id) => !ids.includes(id)),
-        activity: log("deleted", names.length === 1 ? names[0] : `${names.length} products`, "/mm-hub/products"),
-      });
-    },
-    setProductStatus: (ids, status) =>
-      set({
-        products: get().products.map((p) => (ids.includes(p.id) ? { ...p, status, updatedAt: now() } : p)),
-        activity: log(`set ${ids.length} product${ids.length > 1 ? "s" : ""} to`, status, "/mm-hub/products"),
-      }),
-    adjustStock: (productId, change, reason) => {
-      const p = get().products.find((x) => x.id === productId);
-      if (!p) return;
-      const stockAfter = Math.max(0, p.stock + change);
-      set({
-        products: get().products.map((x) => (x.id === productId ? { ...x, stock: stockAfter, updatedAt: now() } : x)),
-        stockAdjustments: [
-          {
-            id: uid("adj"),
-            productId,
-            productName: p.name,
-            sku: p.sku,
-            change: stockAfter - p.stock,
-            reason,
-            stockAfter,
-            by: useAdminSession.getState().user?.name ?? "Admin",
-            at: now(),
-          },
-          ...get().stockAdjustments,
-        ],
-        activity: log(`adjusted stock (${change > 0 ? "+" : ""}${change}) for`, p.name, "/mm-hub/inventory"),
-      });
-    },
-    setLowStockThreshold: (productId, threshold) =>
-      set({ products: get().products.map((p) => (p.id === productId ? { ...p, lowStockThreshold: threshold } : p)) }),
 
-    saveCategory: (category) => {
-      const exists = get().categories.some((c) => c.id === category.id);
-      set({
-        categories: exists
-          ? get().categories.map((c) => (c.id === category.id ? category : c))
-          : [...get().categories, { ...category, sortOrder: get().categories.length }],
-        activity: log(exists ? "updated category" : "added category", category.name, "/mm-hub/categories"),
-      });
+    saveProduct: async (payload, existingId) => {
+      try {
+        const { data: saved } = existingId
+          ? await adminApi<AdminProduct>(`/products/${encodeURIComponent(existingId)}`, { method: "PUT", body: payload })
+          : await adminApi<AdminProduct>("/products", { method: "POST", body: payload });
+        rememberImages(saved.imageMeta);
+        const others = get().products.filter((p) => p.id !== saved.id && p.id !== existingId);
+        set({ products: [saved, ...others], activity: log(existingId ? "updated product" : "added product", saved.name, "/mm-hub/products") });
+        // Variant list and stock may have changed — refresh the dependent views.
+        void refreshInventory();
+        void refreshCategories();
+        return { ok: true, data: saved };
+      } catch (err) {
+        return fail(err);
+      }
     },
-    deleteCategory: (id) => {
-      const c = get().categories.find((x) => x.id === id);
-      set({ categories: get().categories.filter((x) => x.id !== id), activity: log("deleted category", c?.name ?? id, "/mm-hub/categories") });
+
+    deleteProducts: async (ids) => {
+      try {
+        const names = get().products.filter((p) => ids.includes(p.id)).map((p) => p.name);
+        const { data } = await adminApi<{ deleted: string[] }>("/products/bulk", { method: "POST", body: { action: "delete", ids } });
+        set({
+          products: get().products.filter((p) => !data.deleted.includes(p.id)),
+          featuredProductIds: get().featuredProductIds.filter((id) => !data.deleted.includes(id)),
+          inventory: get().inventory.filter((i) => !data.deleted.includes(i.productId)),
+          activity: log("deleted", names.length === 1 ? names[0] : `${names.length} products`, "/mm-hub/products"),
+        });
+        void refreshCategories();
+        return { ok: true, data: undefined };
+      } catch (err) {
+        return fail(err);
+      }
     },
-    moveCategory: (id, direction) => {
-      const target = get().categories.find((c) => c.id === id);
-      if (!target) return;
-      const siblings = get()
-        .categories.filter((c) => c.audience === target.audience)
-        .sort((a, b) => a.sortOrder - b.sortOrder);
-      const i = siblings.findIndex((c) => c.id === id);
-      const swap = siblings[i + direction];
-      if (!swap) return;
-      set({
-        categories: get().categories.map((c) =>
-          c.id === id ? { ...c, sortOrder: swap.sortOrder } : c.id === swap.id ? { ...c, sortOrder: target.sortOrder } : c,
-        ),
-      });
+
+    setProductStatus: async (ids, status) => {
+      try {
+        const { data } = await adminApi<{ updated: string[]; skipped: string[] }>("/products/bulk", { method: "POST", body: { action: "status", ids, status } });
+        const at = now();
+        set({
+          products: get().products.map((p) => (data.updated.includes(p.id) ? { ...p, status, updatedAt: at } : p)),
+          inventory: get().inventory.map((i) => (data.updated.includes(i.productId) ? { ...i, status } : i)),
+          activity: log(`set ${data.updated.length} product${data.updated.length === 1 ? "" : "s"} to`, status, "/mm-hub/products"),
+        });
+        return { ok: true, data: { skipped: data.skipped } };
+      } catch (err) {
+        return fail(err);
+      }
+    },
+
+    adjustStock: async (input) => {
+      try {
+        const { data: item } = await adminApi<InventoryItem>("/inventory/adjust", { method: "POST", body: input });
+        const before = get().inventory.find((i) => i.id === item.id)?.stock ?? item.stock;
+        set({
+          inventory: get().inventory.map((i) => (i.id === item.id ? item : i)),
+          products: get().products.map((p) =>
+            p.id === item.productId
+              ? {
+                  ...p,
+                  stock: p.stock + (item.stock - before),
+                  variants: p.variants?.map((v) => (v.sku === item.sku ? { ...v, stock: item.stock, available: item.available } : v)),
+                }
+              : p,
+          ),
+          activity: log(`adjusted stock (${item.stock - before > 0 ? "+" : ""}${item.stock - before}) for`, item.productName, "/mm-hub/inventory"),
+        });
+        void refreshMovements();
+        return { ok: true, data: item };
+      } catch (err) {
+        return fail(err);
+      }
+    },
+
+    setLowStockThreshold: async (productId, variantSku, threshold) => {
+      try {
+        const { data: item } = await adminApi<InventoryItem>("/inventory/threshold", { method: "PATCH", body: { productId, variantSku, threshold } });
+        set({ inventory: get().inventory.map((i) => (i.id === item.id ? item : i)) });
+        return { ok: true, data: undefined };
+      } catch (err) {
+        return fail(err);
+      }
+    },
+
+    saveCategory: async (category, isNew, image) => {
+      try {
+        const img = image === undefined ? (category.image ? { url: category.image, publicId: category.imagePublicId ?? null } : null) : image;
+        const { data: saved } = isNew
+          ? await adminApi<AdminCategory>("/categories", {
+              method: "POST",
+              body: { name: category.name, slug: category.slug, audience: category.audience, description: category.description, image: img, visible: category.visible },
+            })
+          : await adminApi<AdminCategory>(`/categories/${encodeURIComponent(category.id)}`, {
+              method: "PATCH",
+              body: { name: category.name, description: category.description, image: img, visible: category.visible },
+            });
+        set({
+          categories: isNew ? [...get().categories, saved] : get().categories.map((c) => (c.id === saved.id ? saved : c)),
+          activity: log(isNew ? "added category" : "updated category", saved.name, "/mm-hub/categories"),
+        });
+        return { ok: true, data: saved };
+      } catch (err) {
+        return fail(err);
+      }
+    },
+
+    deleteCategory: async (id) => {
+      try {
+        const c = get().categories.find((x) => x.id === id);
+        await adminApi(`/categories/${encodeURIComponent(id)}`, { method: "DELETE" });
+        set({ categories: get().categories.filter((x) => x.id !== id), activity: log("deleted category", c?.name ?? id, "/mm-hub/categories") });
+        return { ok: true, data: undefined };
+      } catch (err) {
+        return fail(err);
+      }
+    },
+
+    moveCategory: async (id, direction) => {
+      try {
+        const { data } = await adminApi<AdminCategory[]>(`/categories/${encodeURIComponent(id)}/move`, { method: "POST", body: { direction } });
+        set({ categories: data });
+        return { ok: true, data: undefined };
+      } catch (err) {
+        return fail(err);
+      }
     },
 
     updateOrderStatus: (id, status) =>
@@ -288,32 +437,93 @@ export const useAdminStore = create<AdminData & AdminActions>()((set, get) => {
 
     markNotificationRead: (id) => set({ notifications: get().notifications.map((n) => (n.id === id ? { ...n, read: true } : n)) }),
     markAllNotificationsRead: () => set({ notifications: get().notifications.map((n) => ({ ...n, read: true })) }),
-    resetDemo: () => set(initialData()),
+    resetDemo: () => {
+      // Only the sample-data modules reset; the catalogue lives in the database.
+      const { products, categories, inventory, stockAdjustments, catalogStatus } = get();
+      set({ ...initialData(), products, categories, inventory, stockAdjustments, catalogStatus });
+    },
   };
 });
 
-/* ---------- Admin session (MOCK — replace with real admin auth) ---------- */
+/* ---------- Admin session (real: HttpOnly cookies + /api/v1/admin/auth) ---------- */
 
-interface AdminSessionState {
-  user: typeof mockAdminUser | null;
-  login: (email: string, password: string) => { ok: true } | { ok: false; error: string };
-  logout: () => void;
+interface AdminProfileDto {
+  id: string;
+  name: string;
+  username: string | null;
+  email: string | null;
+  role: { key: string; name: string };
+  permissions: string[];
 }
 
-export const useAdminSession = create<AdminSessionState>()(
-  persist(
-    (set) => ({
-      user: null,
-      login: (email, password) => {
-        if (email.trim().toLowerCase() !== DEMO_ADMIN.email || password !== DEMO_ADMIN.password) {
-          return { ok: false, error: "Incorrect email or password." };
+function toAdminUser(p: AdminProfileDto): AdminUser {
+  const initials = p.name
+    .split(/s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("");
+  return { id: p.id, name: p.name, email: p.email ?? p.username ?? "", role: p.role.name, roleKey: p.role.key, permissions: p.permissions, avatarInitials: initials || "A" };
+}
+
+type AuthStatus = "unknown" | "authenticated" | "anonymous";
+
+interface AdminSessionState {
+  user: AdminUser | null;
+  status: AuthStatus;
+  /** Restores the session from cookies (silently refreshing if the access token expired). */
+  load: () => Promise<void>;
+  login: (identifier: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  logout: () => Promise<void>;
+  can: (permission: string) => boolean;
+}
+
+export const useAdminSession = create<AdminSessionState>()((set, get) => ({
+  user: null,
+  status: "unknown",
+
+  load: async () => {
+    try {
+      const { data } = await adminApi<{ admin: AdminProfileDto }>("/auth/me");
+      set({ user: toAdminUser(data.admin), status: "authenticated" });
+    } catch {
+      // No access token (or it expired with the tab closed) — try the refresh cookie once.
+      if (await refreshAdminSession()) {
+        try {
+          const { data } = await adminApi<{ admin: AdminProfileDto }>("/auth/me");
+          set({ user: toAdminUser(data.admin), status: "authenticated" });
+          return;
+        } catch {
+          /* fall through */
         }
-        set({ user: mockAdminUser });
-        return { ok: true };
-      },
-      logout: () => set({ user: null }),
-    }),
-    // sessionStorage: closing the browser signs the demo admin out.
-    { name: "mm-admin-session", storage: createJSONStorage(() => sessionStorage) },
-  ),
-);
+      }
+      set({ user: null, status: "anonymous" });
+    }
+  },
+
+  login: async (identifier, password) => {
+    try {
+      const { data } = await adminApi<{ admin: AdminProfileDto }>("/auth/login", { method: "POST", body: { identifier, password } });
+      set({ user: toAdminUser(data.admin), status: "authenticated" });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: errorMessage(err) };
+    }
+  },
+
+  logout: async () => {
+    try {
+      await adminApi("/auth/logout", { method: "POST" });
+    } catch {
+      /* cookies are cleared server-side when possible; sign out locally regardless */
+    }
+    set({ user: null, status: "anonymous" });
+  },
+
+  can: (permission) => !!get().user?.permissions.includes(permission),
+}));
+
+// Any API call that finds the session gone (revoked, expired, signed out elsewhere) signs out here too.
+if (typeof window !== "undefined") {
+  onAdminSignedOut(() => useAdminSession.setState({ user: null, status: "anonymous" }));
+}

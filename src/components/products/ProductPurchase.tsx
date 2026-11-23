@@ -6,7 +6,7 @@ import { Check, Info, RotateCcw, ShieldCheck, ShoppingBag, Truck, Zap } from "lu
 import { useEffect, useState } from "react";
 import type { Product } from "@/types";
 import { getAudience } from "@/data/audiences";
-import { getCategory } from "@/data/categories";
+import { useCatalog } from "@/components/catalog/CatalogProvider";
 import { usePurchase } from "@/hooks/use-purchase";
 import { UNDERGARMENT_RETURN_POLICY, isUndergarment } from "@/lib/policies";
 import { formatPrice } from "@/lib/utils";
@@ -25,7 +25,7 @@ export function ProductPurchase({ product }: { product: Product }) {
   const p = usePurchase(product);
   const [guideOpen, setGuideOpen] = useState(false);
   const addRecent = useRecentStore((s) => s.add);
-  const category = getCategory(product.categoryId);
+  const category = useCatalog().getCategory(product.categoryId);
   const audience = getAudience(product.audienceCategory);
   const undergarment = isUndergarment(product);
 

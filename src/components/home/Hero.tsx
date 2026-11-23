@@ -5,14 +5,15 @@ import { motion, type Variants } from "framer-motion";
 import { ArrowRight, Star } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { IMG, portrait } from "@/data/images";
-import { getProductBySlug } from "@/data/products";
+import { useCatalog } from "@/components/catalog/CatalogProvider";
 import { formatPrice } from "@/lib/utils";
 import { useIntroStore } from "@/store/intro-store";
 import { ProductImage } from "@/components/ui/ProductImage";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 /** The dress in the main hero photo — tagged so shoppers can tap straight through. */
-const featured = getProductBySlug("floral-maxi-dress");
+/** Product shown in the hero's floating card. */
+const FEATURED_SLUG = "floral-maxi-dress";
 
 /**
  * Reveal choreography (seconds after the hand-off from <IntroAnimation />):
@@ -106,6 +107,7 @@ function MaskLine({ children, delay, state }: { children: ReactNode; delay: numb
 
 export function Hero() {
   const { state, d } = useRevealTiming();
+  const featured = useCatalog().getProductBySlug(FEATURED_SLUG);
 
   return (
     <section

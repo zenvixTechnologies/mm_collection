@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Check, ShoppingBag } from "lucide-react";
-import { getProductById } from "@/data/products";
+import { useCatalog } from "@/components/catalog/CatalogProvider";
 import { usePurchase } from "@/hooks/use-purchase";
 import { useUIStore } from "@/store/ui-store";
 import type { Product } from "@/types";
@@ -17,6 +17,7 @@ import { VariantPicker } from "./VariantPicker";
 export function QuickAddModal() {
   const id = useUIStore((s) => s.quickAddId);
   const close = useUIStore((s) => s.closeQuickAdd);
+  const { getProductById } = useCatalog();
   const product = id ? getProductById(id) : undefined;
 
   return (

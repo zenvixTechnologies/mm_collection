@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { Trash2 } from "lucide-react";
 import type { CartItem } from "@/types";
 import { getAudience } from "@/data/audiences";
-import { getProductById } from "@/data/products";
+import { useCatalog } from "@/components/catalog/CatalogProvider";
 import { formatPrice } from "@/lib/utils";
 import { useCartStore } from "@/store/cart-store";
 import { toast } from "@/store/ui-store";
@@ -18,6 +18,7 @@ export function CartLine({ item, compact = false, onNavigate }: { item: CartItem
   const othersQty = useCartStore((s) =>
     s.items.filter((i) => i.productId === item.productId && i.key !== item.key).reduce((n, i) => n + i.quantity, 0),
   );
+  const { getProductById } = useCatalog();
   const max = Math.max(1, item.stock - othersQty);
   // Bags saved before audiences existed have no `audience` — look it up from the catalogue.
   const audience = item.audience ?? getProductById(item.productId)?.audienceCategory;

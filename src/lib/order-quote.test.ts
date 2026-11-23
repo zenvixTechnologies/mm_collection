@@ -1,7 +1,10 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { products } from "@/data/products";
-import { quoteOrder, toPaise } from "./order-quote";
+import { getProductById, products } from "@/data/products";
+import { quoteOrder as quoteWith, toPaise } from "./order-quote";
+
+/** Tests price against the original catalogue data. */
+const quoteOrder = (lines: unknown, coupon: unknown) => quoteWith(lines, coupon, getProductById);
 import { checkDomesticPayment, verifyPaymentSignature, type RazorpayOrder, type RazorpayPayment } from "./razorpay/server";
 import { parseCheckoutInput, validateCheckout } from "./validation";
 

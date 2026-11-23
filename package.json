@@ -8,15 +8,23 @@
     "start": "node node_modules/next/dist/bin/next start",
     "lint": "node node_modules/eslint/bin/eslint.js .",
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
-    "test": "node node_modules/vitest/vitest.mjs run"
+    "test": "node node_modules/vitest/vitest.mjs run",
+    "db:setup": "node --conditions=react-server --import tsx scripts/db-setup.ts",
+    "db:seed": "node --conditions=react-server --import tsx scripts/db-seed.ts",
+    "admin:create-owner": "node --conditions=react-server --import tsx scripts/admin-create-owner.ts"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "framer-motion": "^12.43.0",
+    "jose": "^6.2.18",
     "lucide-react": "^1.72.0",
+    "mongoose": "^9.12.3",
     "next": "^15.5.29",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "server-only": "^0.0.1",
+    "zod": "^4.6.7",
     "zustand": "^5.1.0"
   },
   "devDependencies": {
@@ -27,7 +35,9 @@
     "@types/react-dom": "^19.3.0",
     "eslint": "^9.39.5",
     "eslint-config-next": "^15.5.29",
+    "mongodb-memory-server": "^11.4.0",
     "tailwindcss": "4.1.18",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   }

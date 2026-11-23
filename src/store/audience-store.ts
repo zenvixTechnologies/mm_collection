@@ -6,8 +6,8 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { Audience } from "@/types";
 import { DEFAULT_AUDIENCE, isAudience } from "@/data/audiences";
-import { getCategory } from "@/data/categories";
-import { getProductBySlug } from "@/data/products";
+import { useCatalog } from "@/components/catalog/CatalogProvider";
+import type { Catalog } from "@/lib/catalog-query";
 import { useHydrated } from "@/hooks/use-hydrated";
 
 /**
@@ -38,12 +38,12 @@ export const useAudienceStore = create<AudienceState>()(
 );
 
 /** Audience implied by the URL alone — null on neutral pages such as the cart or checkout. */
-export function audienceFromPath(pathname: string): Audience | null {
+export function audienceFromPath(pathname: string, catalog: Pick<Catalog, "getCategory" | "getProductBySlug">): Audience | null {
   if (pathname === "/") return "women";
   const [, first, second] = pathname.split("/");
   if (isAudience(first)) return first;
-  if (first === "categories" && second) return getCategory(second)?.audience ?? null;
-  if (first === "product" && second) return getProductBySlug(second)?.audienceCategory ?? null;
+  if (first === "categories" && second) return catalog.getCategory(second)?.audience ?? null;
+  if (first === "product" && second) return catalog.getProductBySlug(second)?.audienceCategory ?? null;
   return null;
 }
 
@@ -55,17 +55,19 @@ export function useActiveAudience(): Audience {
   const pathname = usePathname();
   const hydrated = useHydrated();
   const stored = useAudienceStore((s) => s.audience);
+  const catalog = useCatalog();
   // Before hydration the server can't know sessionStorage — render the default so markup matches.
-  return audienceFromPath(pathname) ?? (hydrated ? stored : DEFAULT_AUDIENCE);
+  return audienceFromPath(pathname, catalog) ?? (hydrated ? stored : DEFAULT_AUDIENCE);
 }
 
 /** Mounted once in the layout: remembers the audience of every audience-specific page visited. */
 export function AudienceTracker() {
   const pathname = usePathname();
   const setAudience = useAudienceStore((s) => s.setAudience);
+  const catalog = useCatalog();
   useEffect(() => {
-    const fromPath = audienceFromPath(pathname);
+    const fromPath = audienceFromPath(pathname, catalog);
     if (fromPath) setAudience(fromPath);
-  }, [pathname, setAudience]);
+  }, [pathname, setAudience, catalog]);
   return null;
 }

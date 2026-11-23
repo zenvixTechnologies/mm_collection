@@ -4,8 +4,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import type { Product, Size } from "@/types";
-import { categories, categoryFullName } from "@/data/categories";
-import { ALL_SIZES, productInCategory } from "@/data/products";
+import { useCatalog } from "@/components/catalog/CatalogProvider";
+import { ALL_SIZES, categoryFullName, productInCategory } from "@/lib/catalog-query";
 import { DISCOUNT_OPTIONS, type Filters } from "@/lib/catalog";
 import { cn, formatPrice } from "@/lib/utils";
 
@@ -31,6 +31,7 @@ function toggle<T>(list: T[], value: T) {
 
 export function FilterPanel({ filters, onChange, source, hideCategory }: FilterPanelProps) {
   const set = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
+  const { categories } = useCatalog();
 
   const sizes = ALL_SIZES.filter((s) => source.some((p) => p.sizes.includes(s)));
   const colors = Array.from(new Map(source.flatMap((p) => p.colors).map((c) => [c.name, c])).values());

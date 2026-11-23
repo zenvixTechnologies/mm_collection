@@ -2,11 +2,11 @@
 
 import { Plus, X } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
-import type { Audience, Size } from "@/types";
-import type { AdminProduct, ProductStatus } from "@/types/admin";
-import { DEFAULT_LOW_STOCK_THRESHOLD } from "@/data/admin/catalog";
+import type { Audience, ProductColor, Size } from "@/types";
+import type { AdminProduct, AdminVariant, ProductStatus } from "@/types/admin";
 import { cn, discountPercent, formatPrice, slugify } from "@/lib/utils";
-import { uid, useAdminStore } from "@/store/admin-store";
+import { imageDetails } from "@/lib/admin-upload";
+import { uid, useAdminStore, type ProductPayload } from "@/store/admin-store";
 import { toast } from "@/store/ui-store";
 import { Dialog } from "@/components/ui/Dialog";
 import { FormSection, SelectField, Switch, TextAreaField, TextField } from "../ui/FormControls";
@@ -47,10 +47,33 @@ function blankProduct(categoryId: string, audience: Audience): AdminProduct {
     packageWidth: 25,
     packageHeight: 3,
     status: "draft",
-    lowStockThreshold: DEFAULT_LOW_STOCK_THRESHOLD,
+    lowStockThreshold: 0,
     updatedAt: new Date(stamp).toISOString(),
   };
 }
+
+/** Matches the server's rule: one variant per size × colour. */
+const variantKey = (size: string | null, color: { name: string } | null) => `${size ?? ""}|${color?.name.trim().toLowerCase() ?? ""}`;
+
+interface VariantRow {
+  key: string;
+  size: string | null;
+  color: ProductColor | null;
+  existing: AdminVariant | undefined;
+}
+
+function variantRows(p: AdminProduct): VariantRow[] {
+  const sizes: (string | null)[] = p.sizes.length ? p.sizes : [null];
+  const colors: (ProductColor | null)[] = p.colors.length ? p.colors : [null];
+  return sizes.flatMap((size) =>
+    colors.map((color) => {
+      const key = variantKey(size, color);
+      return { key, size, color, existing: p.variants?.find((v) => v.isActive && variantKey(v.size, v.color) === key) ?? p.variants?.find((v) => variantKey(v.size, v.color) === key) };
+    }),
+  );
+}
+
+const DEFAULT_VARIANT_ALERT = 2;
 
 type Errors = Partial<Record<"name" | "sku" | "slug" | "price" | "originalPrice" | "images" | "sizes" | "categoryId", string>>;
 
@@ -98,6 +121,15 @@ function ProductForm({ product, onDone }: { product: AdminProduct | null; onDone
   const [errors, setErrors] = useState<Errors>({});
   const [colorName, setColorName] = useState("");
   const [colorHex, setColorHex] = useState("#b3121b");
+  const [saving, setSaving] = useState(false);
+  /** Opening stock for new variants and alert levels, keyed by size|colour. */
+  const [variantInput, setVariantInput] = useState<Record<string, { initialStock: number; threshold: number }>>({});
+  const rows = useMemo(() => variantRows(p), [p]);
+  const removedVariants = (p.variants ?? []).filter((v) => v.isActive && !rows.some((r) => r.key === variantKey(v.size, v.color)));
+  const inputFor = (r: VariantRow) =>
+    variantInput[r.key] ?? { initialStock: 0, threshold: r.existing?.lowStockThreshold ?? DEFAULT_VARIANT_ALERT };
+  const setInput = (key: string, patch: Partial<{ initialStock: number; threshold: number }>, r: VariantRow) =>
+    setVariantInput((prev) => ({ ...prev, [key]: { ...inputFor(r), ...prev[key], ...patch } }));
 
   const clearError = (key: string) =>
     setErrors((prev) => {
@@ -116,7 +148,7 @@ function ProductForm({ product, onDone }: { product: AdminProduct | null; onDone
   );
   const discount = discountPercent(p.originalPrice, p.price);
 
-  const submit = (status?: ProductStatus) => (e?: FormEvent) => {
+  const submit = (status?: ProductStatus) => async (e?: FormEvent) => {
     e?.preventDefault();
     const next = {
       ...p,
@@ -132,7 +164,39 @@ function ProductForm({ product, onDone }: { product: AdminProduct | null; onDone
       toast.error("Please fix the highlighted fields.");
       return;
     }
-    saveProduct(next);
+    const payload: ProductPayload = {
+      name: next.name,
+      slug: next.slug,
+      sku: next.sku,
+      audience: next.audienceCategory,
+      category: next.categoryId,
+      tags: next.tags.filter((t) => t !== next.categoryId),
+      shortDescription: next.shortDescription.trim(),
+      description: next.description.trim(),
+      images: imageDetails(next.images, next.name),
+      pricePaise: Math.round(next.price * 100),
+      mrpPaise: Math.round(next.originalPrice * 100),
+      variants: rows.map((r) => ({
+        size: r.size,
+        color: r.color ? { name: r.color.name, hex: r.color.hex } : null,
+        lowStockThreshold: inputFor(r).threshold,
+        ...(!r.existing && { initialStock: inputFor(r).initialStock }),
+      })),
+      fabric: next.fabric.trim(),
+      care: next.care,
+      status: next.status,
+      featured: next.featured,
+      newArrival: next.newArrival,
+      bestSeller: next.bestSeller,
+      weightGrams: next.weight > 0 ? Math.round(next.weight) : undefined,
+    };
+    setSaving(true);
+    const res = await saveProduct(payload, product?.id ?? null);
+    setSaving(false);
+    if (!res.ok) {
+      toast.error(res.error);
+      return;
+    }
     toast.success(product ? `Saved “${next.name}”` : `Added “${next.name}”`);
     onDone();
   };
@@ -142,7 +206,7 @@ function ProductForm({ product, onDone }: { product: AdminProduct | null; onDone
       <div className="flex-1 space-y-6 px-5 py-5">
         <FormSection title="Images" description="The first image is used on product cards.">
           <div className="sm:col-span-2">
-            <MultiImageUpload images={p.images} onChange={(images) => set("images", images)} altBase={p.name || "Product"} />
+            <MultiImageUpload images={p.images} onChange={(images) => set("images", images)} altBase={p.name || "Product"} purpose="product" uploadRef={p.slug || undefined} />
             {errors.images && <p className="field-error">{errors.images}</p>}
           </div>
         </FormSection>
@@ -325,17 +389,74 @@ function ProductForm({ product, onDone }: { product: AdminProduct | null; onDone
           </div>
         </FormSection>
 
-        <FormSection title="Inventory">
-          <TextField label="Stock on hand" type="number" min={0} inputMode="numeric" value={p.stock} onChange={(e) => set("stock", Math.max(0, Number(e.target.value)))} />
-          <TextField
-            label="Low-stock alert at"
-            type="number"
-            min={0}
-            inputMode="numeric"
-            value={p.lowStockThreshold}
-            hint="You'll be alerted at or below this quantity."
-            onChange={(e) => set("lowStockThreshold", Math.max(0, Number(e.target.value)))}
-          />
+        <FormSection
+          title="Inventory"
+          description="Stock is tracked per size and colour. Set opening stock for new variants here; change existing stock from Inventory so every change is recorded."
+        >
+          <div className="overflow-x-auto rounded-xl border border-line sm:col-span-2">
+            <table className="w-full min-w-[420px] text-sm">
+              <thead className="bg-canvas text-left text-xs text-muted">
+                <tr>
+                  <th scope="col" className="px-3 py-2 font-semibold">Variant</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">SKU</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Stock</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Alert at</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {rows.map((r) => {
+                  const label = [r.size, r.color?.name].filter(Boolean).join(" · ") || "Single variant";
+                  const input = inputFor(r);
+                  return (
+                    <tr key={r.key}>
+                      <td className="px-3 py-2">
+                        <span className="inline-flex items-center gap-2 font-medium">
+                          {r.color && <span className="h-3.5 w-3.5 rounded-full ring-1 ring-ink/10" style={{ background: r.color.hex }} aria-hidden />}
+                          {label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-muted">{r.existing?.sku ?? "Assigned on save"}</td>
+                      <td className="px-3 py-2">
+                        {r.existing ? (
+                          <span className="tabular-nums">
+                            {r.existing.stock}
+                            {r.existing.reserved > 0 && <span className="text-xs text-muted"> ({r.existing.reserved} reserved)</span>}
+                          </span>
+                        ) : (
+                          <input
+                            type="number"
+                            min={0}
+                            inputMode="numeric"
+                            value={input.initialStock}
+                            onChange={(e) => setInput(r.key, { initialStock: Math.max(0, Math.floor(Number(e.target.value) || 0)) }, r)}
+                            aria-label={`Opening stock for ${label}`}
+                            className="field-input field-sm h-9 w-20 text-center tabular-nums"
+                          />
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <input
+                          type="number"
+                          min={0}
+                          inputMode="numeric"
+                          value={input.threshold}
+                          onChange={(e) => setInput(r.key, { threshold: Math.max(0, Math.floor(Number(e.target.value) || 0)) }, r)}
+                          aria-label={`Low-stock alert level for ${label}`}
+                          className="field-input field-sm h-9 w-16 text-center tabular-nums"
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {removedVariants.length > 0 && (
+            <p className="text-xs text-warning sm:col-span-2">
+              {removedVariants.length} existing variant{removedVariants.length === 1 ? "" : "s"} ({removedVariants.map((v) => [v.size, v.color?.name].filter(Boolean).join(" · ")).join(", ")}) will be hidden
+              from the store. Their stock history is kept.
+            </p>
+          )}
           <TextField label="Packed weight (g)" type="number" min={1} value={p.weight} onChange={(e) => set("weight", Math.max(1, Number(e.target.value)))} />
         </FormSection>
 
@@ -364,16 +485,16 @@ function ProductForm({ product, onDone }: { product: AdminProduct | null; onDone
         </button>
         {p.status === "draft" ? (
           <>
-            <button type="button" onClick={submit("draft")} className="btn-outline btn-sm">
+            <button type="button" onClick={submit("draft")} className="btn-outline btn-sm" disabled={saving}>
               Save as draft
             </button>
-            <button type="button" onClick={submit("active")} className="btn-primary btn-sm">
-              Save &amp; publish
+            <button type="button" onClick={submit("active")} className="btn-primary btn-sm" disabled={saving}>
+              {saving ? "Saving…" : "Save & publish"}
             </button>
           </>
         ) : (
-          <button type="submit" className="btn-primary btn-sm">
-            {product ? "Save changes" : "Add product"}
+          <button type="submit" className="btn-primary btn-sm" disabled={saving}>
+            {saving ? "Saving…" : product ? "Save changes" : "Add product"}
           </button>
         )}
       </div>

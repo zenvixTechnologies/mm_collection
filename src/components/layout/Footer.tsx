@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Mail, MapPin, Phone } from "lucide-react";
 import { AUDIENCES } from "@/data/audiences";
-import { getCategoriesByAudience } from "@/data/categories";
+import { getCatalog } from "@/server/services/catalog.service";
 import { SITE } from "@/lib/utils";
 import { FacebookIcon, InstagramIcon, WhatsappIcon, YoutubeIcon } from "@/components/ui/SocialIcons";
 import { Logo } from "./Logo";
@@ -29,7 +29,8 @@ const socials = [
   { href: `https://wa.me/${SITE.whatsapp.replace(/\D/g, "")}`, label: "WhatsApp", icon: <WhatsappIcon /> },
 ];
 
-export function Footer() {
+export async function Footer() {
+  const { getCategoriesByAudience } = await getCatalog();
   return (
     <footer className="relative mt-20 bg-royal text-white/70">
       <div className="gold-rule absolute inset-x-0 top-0" aria-hidden />

@@ -6,7 +6,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useHydrated } from "@/hooks/use-hydrated";
-import { useAdminSession } from "@/store/admin-store";
+import { useAdminSession, useAdminStore } from "@/store/admin-store";
+import { toast } from "@/store/ui-store";
 import { AdminHeader } from "./AdminHeader";
 import { AdminSidebarContent } from "./AdminSidebar";
 
@@ -69,20 +70,35 @@ function MobileNav({ open, onClose }: { open: boolean; onClose: () => void }) {
 
 /**
  * Admin chrome: fixed royal sidebar on desktop, drawer on mobile, sticky header, ivory canvas.
- * MOCK GUARD — redirects to /admin/login when no demo admin session exists. Real protection
- * (server-side session check / middleware) arrives with the backend.
+ * The session is verified by the server (GET /api/v1/admin/auth/me); middleware and every admin
+ * API enforce it independently, so this redirect is only for a smooth experience.
  */
 export function AdminShell({ children }: { children: ReactNode }) {
   const hydrated = useHydrated();
   const user = useAdminSession((s) => s.user);
+  const status = useAdminSession((s) => s.status);
+  const load = useAdminSession((s) => s.load);
   const router = useRouter();
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
   const closeNav = useCallback(() => setNavOpen(false), []);
 
   useEffect(() => {
-    if (hydrated && !user) router.replace(`/mm-hub/login?next=${encodeURIComponent(pathname)}`);
-  }, [hydrated, user, router, pathname]);
+    if (hydrated && status === "unknown") void load();
+  }, [hydrated, status, load]);
+  // Load catalogue data (products, categories, inventory) from the API once signed in.
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    void useAdminStore
+      .getState()
+      .loadCatalog()
+      .then((r) => {
+        if (!r.ok) toast.error(`Couldn't load the catalogue: ${r.error}`);
+      });
+  }, [status]);
+  useEffect(() => {
+    if (status === "anonymous") router.replace(`/mm-hub/login?next=${encodeURIComponent(pathname)}`);
+  }, [status, router, pathname]);
 
   if (!hydrated || !user) return <AdminSplash />;
 
