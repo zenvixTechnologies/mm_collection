@@ -19,7 +19,13 @@ export interface SessionMeta {
   ip?: string;
 }
 
-export async function createSession(subjectType: SubjectType, subject: Types.ObjectId | string, ttlSeconds: number, meta: SessionMeta = {}) {
+export async function createSession(
+  subjectType: SubjectType,
+  subject: Types.ObjectId | string,
+  ttlSeconds: number,
+  meta: SessionMeta = {},
+  { persistent = true }: { persistent?: boolean } = {},
+) {
   await connectToDatabase();
   const refreshToken = generateRefreshToken();
   const session = await Session.create({
@@ -29,6 +35,7 @@ export async function createSession(subjectType: SubjectType, subject: Types.Obj
     familyId: randomUUID(),
     refreshTokenHash: hashRefreshToken(refreshToken),
     expiresAt: new Date(Date.now() + ttlSeconds * 1000),
+    persistent,
     userAgent: (meta.userAgent ?? "").slice(0, 400),
     ip: (meta.ip ?? "").slice(0, 64),
   });
@@ -36,7 +43,7 @@ export async function createSession(subjectType: SubjectType, subject: Types.Obj
 }
 
 export type RotateResult =
-  | { ok: true; sessionId: string; subject: string; subjectType: SubjectType; refreshToken: string; expiresAt: Date }
+  | { ok: true; sessionId: string; subject: string; subjectType: SubjectType; refreshToken: string; expiresAt: Date; persistent: boolean }
   | { ok: false; reason: "invalid" | "reused" | "race" };
 
 /**
@@ -68,6 +75,7 @@ export async function rotateSession(refreshToken: string | undefined, subjectTyp
       subjectType,
       refreshToken: next,
       expiresAt: session.expiresAt,
+      persistent: session.persistent !== false,
     };
   }
 

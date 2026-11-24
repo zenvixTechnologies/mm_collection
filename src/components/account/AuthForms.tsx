@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Eye, EyeOff, Info, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { DEMO_USER } from "@/data/orders";
+import { customerApi } from "@/lib/customer-api";
+import { errorMessage } from "@/lib/api-client";
 import { EMAIL_RE, isValidMobile, normalizeMobile } from "@/lib/validation";
 import { useAuthStore } from "@/store/auth-store";
 import { toast } from "@/store/ui-store";
@@ -15,7 +16,7 @@ function safeNext(next: string | null) {
   return next && next.startsWith("/") && !next.startsWith("//") ? next : "/account";
 }
 
-function PasswordField({
+export function PasswordField({
   label,
   name,
   value,
@@ -57,18 +58,6 @@ function PasswordField({
   );
 }
 
-function DemoNotice() {
-  return (
-    <p className="mb-6 flex gap-2 rounded-xl bg-canvas px-4 py-3 text-[13px] text-muted">
-      <Info size={16} className="mt-0.5 shrink-0 text-accent" />
-      <span>
-        Demo sign-in only: accounts are stored in this browser and are not secure. Try{" "}
-        <strong className="text-ink">{DEMO_USER.email}</strong> / <strong className="text-ink">{DEMO_USER.password}</strong>.
-      </span>
-    </p>
-  );
-}
-
 export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
@@ -80,7 +69,7 @@ export function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const errs: typeof errors = {};
     const id = identifier.trim();
@@ -91,21 +80,19 @@ export function LoginForm() {
     if (Object.keys(errs).length) return;
 
     setLoading(true);
-    window.setTimeout(() => {
-      const res = login(id, password, remember);
-      setLoading(false);
-      if (!res.ok) {
-        setErrors({ form: res.error });
-        return;
-      }
-      toast.success("Welcome back!");
-      router.push(safeNext(params.get("next")));
-    }, 500);
+    const res = await login(id, password, remember);
+    setLoading(false);
+    if (!res.ok) {
+      setErrors({ form: res.error });
+      setPassword("");
+      return;
+    }
+    toast.success("Welcome back!");
+    router.push(safeNext(params.get("next")));
   };
 
   return (
     <>
-      <DemoNotice />
       <form onSubmit={submit} noValidate className="space-y-5">
         {errors.form && (
           <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger" role="alert">
@@ -149,6 +136,7 @@ function ForgotPassword({ open, onClose }: { open: boolean; onClose: () => void 
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
   return (
     <Dialog
       open={open}
@@ -162,23 +150,31 @@ function ForgotPassword({ open, onClose }: { open: boolean; onClose: () => void 
       <div className="p-5">
         {sent ? (
           <p className="text-sm text-muted" role="status">
-            If an account exists for <strong className="text-ink">{email}</strong>, a reset link would be emailed. (Demo store — no email
-            is actually sent.)
+            If an account exists for <strong className="text-ink">{email}</strong>, we&apos;ve emailed a link to reset your password. It
+            works once and expires in 30 minutes. Check your spam folder if it doesn&apos;t arrive.
           </p>
         ) : (
           <form
             noValidate
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
               if (!EMAIL_RE.test(email.trim())) return setError("Enter a valid email address.");
-              setSent(true);
+              setSending(true);
+              try {
+                await customerApi("/auth/forgot-password", { method: "POST", body: { email: email.trim() } });
+                setSent(true);
+              } catch (err) {
+                setError(errorMessage(err));
+              } finally {
+                setSending(false);
+              }
             }}
             className="space-y-4"
           >
             <p className="text-sm text-muted">Enter the email you registered with and we&apos;ll send you a reset link.</p>
             <Field label="Email address" name="reset-email" type="email" value={email} onChange={(e) => (setEmail(e.target.value), setError(""))} error={error} />
-            <button type="submit" className="btn-primary w-full">
-              Send reset link
+            <button type="submit" className="btn-primary w-full" disabled={sending}>
+              {sending && <Loader2 size={17} className="animate-spin" />} Send reset link
             </button>
           </form>
         )}
@@ -200,7 +196,7 @@ export function RegisterForm() {
     if (errors[k]) setErrors((er) => ({ ...er, [k]: undefined }));
   };
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const errs: typeof errors = {};
     if (f.fullName.trim().length < 3) errs.fullName = "Please enter your full name.";
@@ -213,18 +209,15 @@ export function RegisterForm() {
     if (Object.keys(errs).length) return;
 
     setLoading(true);
-    window.setTimeout(() => {
-      const res = register({ fullName: f.fullName, email: f.email, mobile: normalizeMobile(f.mobile), password: f.password });
-      setLoading(false);
-      if (!res.ok) return setErrors({ form: res.error });
-      toast.success("Account created — welcome to M&M COLLECTIONS!");
-      router.push(safeNext(params.get("next")));
-    }, 500);
+    const res = await register({ fullName: f.fullName.trim(), email: f.email.trim(), mobile: normalizeMobile(f.mobile), password: f.password });
+    setLoading(false);
+    if (!res.ok) return setErrors({ form: res.error, ...(res.fields as typeof errors | undefined) });
+    toast.success("Account created — welcome to M&M COLLECTIONS!");
+    router.push(safeNext(params.get("next")));
   };
 
   return (
     <>
-      <DemoNotice />
       <form onSubmit={submit} noValidate className="space-y-5">
         {errors.form && (
           <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger" role="alert">

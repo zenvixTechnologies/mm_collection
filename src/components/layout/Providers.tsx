@@ -2,19 +2,12 @@
 
 import { MotionConfig } from "framer-motion";
 import { useEffect, type ReactNode } from "react";
-import { SESSION_FLAG, useAuthStore } from "@/store/auth-store";
+import { useAuthStore } from "@/store/auth-store";
 
 export function Providers({ children }: { children: ReactNode }) {
-  // Mock "remember me": if the user didn't ask to be remembered, end the
-  // session once the browser session (tab/window) is closed.
+  // Restore the customer's session from its HttpOnly cookies (no-op for guests).
   useEffect(() => {
-    const { currentUserId, remember, logout } = useAuthStore.getState();
-    try {
-      if (currentUserId && !remember && !sessionStorage.getItem(SESSION_FLAG)) logout();
-      if (useAuthStore.getState().currentUserId) sessionStorage.setItem(SESSION_FLAG, "1");
-    } catch {
-      /* storage unavailable */
-    }
+    void useAuthStore.getState().load();
   }, []);
 
   return <MotionConfig reducedMotion="user">{children}</MotionConfig>;

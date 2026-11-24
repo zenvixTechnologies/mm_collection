@@ -18,6 +18,8 @@ const SessionSchema = new Schema(
     refreshTokenHash: { type: String, required: true },
     previousTokenHashes: { type: [String], default: [], select: false },
     expiresAt: { type: Date, required: true },
+    /** "Remember me": cookies outlive the browser session. */
+    persistent: { type: Boolean, default: true },
     revokedAt: { type: Date, default: null },
     revokedReason: { type: String, enum: ["logout", "logout_all", "reuse_detected", "password_changed", "admin", null], default: null },
     lastUsedAt: { type: Date, default: () => new Date() },

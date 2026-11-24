@@ -2,13 +2,12 @@ import type { Order, OrderItem, OrderStatus } from "@/types";
 import { ORDER_STATUSES } from "@/types";
 import { products } from "./products";
 
-/** Demo account used for mock sign-in and pre-filled order history. */
+/** Sample customer used by the admin panel's demo orders (not a sign-in account). */
 export const DEMO_USER = {
   id: "u-demo",
   fullName: "Anjali Menon",
   email: "demo@mmcollections.in",
   mobile: "9876543210",
-  password: "demo1234",
   addresses: [
     {
       house: "Flat 4B, Lotus Residency",

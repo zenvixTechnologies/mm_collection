@@ -43,8 +43,8 @@ export function AccountNav() {
       {user && (
         <button
           type="button"
-          onClick={() => {
-            logout();
+          onClick={async () => {
+            await logout();
             toast.info("You've been logged out");
             router.push("/");
           }}

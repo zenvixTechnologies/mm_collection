@@ -21,7 +21,8 @@ npm test           # unit tests (Vitest)
 
 ## Demo details
 
-- **Demo login:** `demo@mmcollections.in` / `demo1234` (includes sample order history)
+- **Customer accounts:** real sign-up/login (MongoDB, HttpOnly cookies). Create an account at `/register`.
+- **Admin:** `/mm-hub/login` — create the first owner with `npm run admin:create-owner`.
 - **Coupons:** `WELCOME10`, `FIRSTORDER` (min ₹799), `SAVE15` (min ₹1,999), `FESTIVE20` (min ₹2,999)
 - **Sample order IDs for tracking:** `MM24A7K1`, `MM24A3F9`, `MM24931C`
 
@@ -52,7 +53,7 @@ There is no database yet:
 - Cart, wishlist, orders, accounts and recently-viewed items live in the browser's `localStorage`
   (paid orders are recorded there after server verification — add a database and a Razorpay
   webhook before going live so paid orders are stored server-side).
-- Authentication is mock-only. Passwords are stored in plain text locally; do not reuse real ones.
+- Customer and admin authentication run on the server (bcrypt-hashed passwords, rotating HttpOnly session cookies).
 - Cash on Delivery is disabled.
 - Shipping shows "Shipping Charges Applicable" only: no shipping amount is calculated or added to totals yet.
 - PIN code delivery estimates, order tracking statuses, the newsletter and contact forms use dummy logic.

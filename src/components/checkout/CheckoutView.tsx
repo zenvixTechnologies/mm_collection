@@ -119,7 +119,7 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
       fullName: f.fullName || user.fullName,
       email: f.email || user.email,
       mobile: f.mobile || user.mobile,
-      ...(user.addresses[0] && !f.house ? user.addresses[0] : {}),
+      ...(user.addresses[0] && !f.house ? addressFields(user.addresses[0]) : {}),
     }));
   }
 
@@ -130,7 +130,7 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
   };
 
   const applySaved = (a: Address) => {
-    setForm((f) => ({ ...f, ...a }));
+    setForm((f) => ({ ...f, ...addressFields(a) }));
     setErrors({});
   };
 
@@ -203,7 +203,7 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
           history: { "Order Placed": now },
         };
         addOrder(order);
-        if (user && saveAddress) addAddress(address);
+        if (user && saveAddress) void addAddress(address);
         if (isBuyNow) clearBuyNow();
         else clearCart();
         router.replace(`/order-success?id=${order.id}`);
@@ -514,4 +514,9 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
       {children}
     </section>
   );
+}
+
+/** Only the delivery fields of a saved address (never its id, label or recipient name). */
+function addressFields(a: Address): Address {
+  return { house: a.house, street: a.street, city: a.city, district: a.district, state: a.state, pincode: a.pincode };
 }

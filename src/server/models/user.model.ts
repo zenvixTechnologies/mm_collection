@@ -33,7 +33,7 @@ const UserSchema = new Schema(
     passwordChangedAt: { type: Date, default: null },
     /** Only a SHA-256 hash of the reset token is stored. */
     passwordReset: {
-      type: new Schema({ tokenHash: String, expiresAt: Date }, { _id: false }),
+      type: new Schema({ tokenHash: String, expiresAt: Date, requestedAt: Date }, { _id: false }),
       default: null,
       select: false,
     },
@@ -43,6 +43,7 @@ const UserSchema = new Schema(
 
 UserSchema.index({ email: 1 }, { unique: true });
 UserSchema.index({ mobile: 1 }, { unique: true, partialFilterExpression: { mobile: { $type: "string" } } });
+UserSchema.index({ "passwordReset.tokenHash": 1 }, { partialFilterExpression: { "passwordReset.tokenHash": { $type: "string" } } });
 UserSchema.index({ createdAt: -1 });
 UserSchema.index({ status: 1, createdAt: -1 });
 

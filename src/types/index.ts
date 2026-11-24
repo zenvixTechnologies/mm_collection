@@ -269,11 +269,25 @@ export interface Offer {
   href: string;
 }
 
+/** A saved delivery address on a customer account. */
+export interface SavedAddress extends Address {
+  id: string;
+  label: string;
+  /** Recipient, when different from the account holder. */
+  fullName?: string;
+  mobile?: string;
+  isDefault: boolean;
+}
+
+/** The signed-in customer, as returned by GET /api/v1/auth/me. Never contains secrets. */
 export interface User {
   id: string;
   fullName: string;
   email: string;
   mobile: string;
-  password: string;
-  addresses: Address[];
+  /** Default address first. */
+  addresses: SavedAddress[];
+  emailVerified: boolean;
+  marketingOptIn: boolean;
+  createdAt: string;
 }
