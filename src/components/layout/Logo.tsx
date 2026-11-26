@@ -3,7 +3,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /**
- * Brand logo — the official M&M COLLECTIONS emblem.
+ * Brand logo — the M&M COLLECTIONS gold "K" laurel emblem (transparent background).
  * Sources are pre-sized from the original artwork (public/brand/logo-original.png)
  * at ~3× display size, so they stay crisp on high-density screens. They are served
  * as-is (unoptimized) to avoid any re-compression.
@@ -21,7 +21,7 @@ interface LogoProps {
   size?: Size;
   /** Show the "M&M COLLECTIONS" wordmark beside the emblem (header). */
   withWordmark?: boolean;
-  /** Footer sits on a dark background: place the emblem on a white disc. */
+  /** On the dark maroon surfaces (footer, admin sidebar): a deep disc with a fine gold ring and soft glow. */
   onDark?: boolean;
   priority?: boolean;
   /** Where the logo links to (the admin panel links to its dashboard). */
@@ -32,7 +32,7 @@ export function Logo({ className, size = "header", withWordmark = false, onDark 
   const s = SIZES[size];
   return (
     <Link href={href} aria-label="M&M COLLECTIONS — home" className={cn("group inline-flex items-center gap-2.5", className)}>
-      <span className={cn("relative block shrink-0 rounded-full", onDark && "bg-white p-1.5 shadow-[0_4px_24px_rgb(0_0_0/0.4)] ring-2 ring-gold/70")}>
+      <span className={cn("relative block shrink-0 rounded-full", onDark && "bg-royal-light p-1.5 shadow-[0_0_0_4px_rgb(201_165_76/0.08),0_6px_24px_rgb(0_0_0/0.45)] ring-1 ring-gold/60")}>
         <Image
           src={s.src}
           alt="M&M COLLECTIONS logo"
