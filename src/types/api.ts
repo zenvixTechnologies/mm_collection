@@ -15,6 +15,12 @@ export const API_ERROR_CODES = [
   "NOT_FOUND",
   "METHOD_NOT_ALLOWED",
   "CONFLICT",
+  /** Checkout: an item is unavailable or short of stock — re-validate and show the issues. */
+  "CART_CHANGED",
+  /** Checkout: the total differs from the one the customer saw (a price changed). */
+  "PRICE_CHANGED",
+  /** Checkout: the coupon can't be used for this order. */
+  "COUPON_INVALID",
   "PAYLOAD_TOO_LARGE",
   "UNSUPPORTED_MEDIA_TYPE",
   "RATE_LIMITED",

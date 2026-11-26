@@ -75,8 +75,17 @@ const OrderSchema = new Schema(
       default: [],
     },
     razorpayOrderId: { type: String, default: null },
-    /** Client-supplied key so a double-clicked "Pay" never creates two orders. */
+    /**
+     * Client-supplied key so a double-clicked "Place Order" never creates two orders. Stored
+     * prefixed with the customer/guest scope (`u:<userId>:<key>` / `g:<guestHash>:<key>`), so the
+     * unique index makes keys unique per shopper.
+     */
     idempotencyKey: { type: String, default: null },
+    /**
+     * Random per-order value; the guest access token is HMAC(server secret, order id + nonce), so
+     * the token itself is never stored. Never sent to clients.
+     */
+    accessNonce: { type: String, default: null, select: false },
     /** Stock is held until this time; a cron job expires unpaid orders after it. */
     reservationExpiresAt: { type: Date, default: null },
     stockReleased: { type: Boolean, default: false },

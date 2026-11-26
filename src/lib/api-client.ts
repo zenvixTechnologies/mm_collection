@@ -52,12 +52,16 @@ export function createApiClient({ base, refreshPath }: { base: string; refreshPa
     return refreshing;
   }
 
-  async function request<T>(path: string, init: { method?: Method; body?: unknown; signal?: AbortSignal } = {}): Promise<ApiResult<T>> {
+  async function request<T>(
+    path: string,
+    init: { method?: Method; body?: unknown; signal?: AbortSignal; headers?: Record<string, string> } = {},
+  ): Promise<ApiResult<T>> {
+    const headers = { ...(init.body === undefined ? {} : { "Content-Type": "application/json" }), ...init.headers };
     const send = () =>
       fetch(`${base}${path}`, {
         method: init.method ?? "GET",
         credentials: "same-origin",
-        headers: init.body === undefined ? undefined : { "Content-Type": "application/json" },
+        headers: Object.keys(headers).length ? headers : undefined,
         body: init.body === undefined ? undefined : JSON.stringify(init.body),
         signal: init.signal,
         cache: "no-store",
