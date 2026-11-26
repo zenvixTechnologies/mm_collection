@@ -34,6 +34,9 @@ const ORDER_TONE: Record<AdminOrderStatus, BadgeTone> = {
   "Out for Delivery": "accent",
   Delivered: "success",
   Cancelled: "muted",
+  "Payment Pending": "warning",
+  "Payment Failed": "danger",
+  Expired: "muted",
 };
 
 export function OrderStatusBadge({ status }: { status: AdminOrderStatus }) {
@@ -42,6 +45,7 @@ export function OrderStatusBadge({ status }: { status: AdminOrderStatus }) {
 
 export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
   created: "Created",
+  pending: "Pending",
   authorized: "Authorized",
   captured: "Paid",
   failed: "Failed",
@@ -51,6 +55,7 @@ export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
 
 const PAYMENT_TONE: Record<PaymentStatus, BadgeTone> = {
   created: "neutral",
+  pending: "warning",
   authorized: "neutral",
   captured: "success",
   failed: "danger",

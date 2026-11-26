@@ -182,6 +182,70 @@ export interface WishlistSnapshot {
   items: { productId: string; addedAt: string }[];
 }
 
+/* ---------- Checkout (POST /api/v1/checkout/validate) ---------- */
+
+/** What is being bought: the server-side bag, or one "Buy Now" line that leaves the bag alone. */
+export type CheckoutSource =
+  | { type: "cart" }
+  | { type: "buy-now"; item: { productId: string; size: Size | null; color: string | null; quantity: number } };
+
+export type CheckoutIssueCode = "unavailable" | "out_of_stock" | "insufficient_stock" | "price_changed" | "empty";
+
+/** A problem with one line (or the whole bag) that must be fixed before the order can be placed. */
+export interface CheckoutIssue {
+  code: CheckoutIssueCode;
+  /** Variant SKU of the affected line, when there is one. */
+  sku: string | null;
+  message: string;
+  /** False for informational notices (a price changed — the quote already shows the new price). */
+  blocking: boolean;
+}
+
+export interface CheckoutCoupon {
+  code: string;
+  /** applied → discount is in the totals; rejected → `message` says why (nothing is discounted). */
+  status: "applied" | "rejected";
+  description: string;
+  message: string | null;
+  /** Rupees. */
+  discount: number;
+}
+
+/** A server-computed price quote. Every amount comes from MongoDB at request time. */
+export interface CheckoutQuote {
+  /** One line per variant; `key` is the variant SKU, `price` its current selling price. */
+  items: CartItem[];
+  totals: CartTotals;
+  /** Exact integer paise — send `totalPaise` back as `expectedTotalPaise` when placing the order. */
+  amounts: { subtotalPaise: number; mrpTotalPaise: number; discountPaise: number; totalPaise: number };
+  coupon: CheckoutCoupon | null;
+  issues: CheckoutIssue[];
+  canPlaceOrder: boolean;
+  currency: "INR";
+}
+
+/** A homepage banner the storefront shows (active and within its dates). */
+export interface StorefrontBanner {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  ctaLabel: string;
+  ctaHref: string;
+  image: string;
+}
+
+/** A coupon the storefront may advertise (GET /api/v1/coupons). */
+export interface PublicCoupon {
+  code: string;
+  description: string;
+  type: CouponType;
+  /** Percent, or rupees for flat coupons. */
+  value: number;
+  /** Rupees. */
+  minOrder: number;
+  maxDiscount: number | null;
+}
+
 export interface CartTotals {
   itemCount: number;
   subtotal: number;
@@ -243,19 +307,32 @@ export const ORDER_STATUSES = [
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
+/**
+ * Statuses outside the delivery timeline: waiting for payment (stock is reserved), or an order
+ * that ended before it was paid.
+ */
+export const ORDER_SIDE_STATUSES = ["Payment Pending", "Payment Failed", "Expired", "Cancelled"] as const;
+export type StoreOrderStatus = OrderStatus | (typeof ORDER_SIDE_STATUSES)[number];
+
 export interface OrderItem {
   productId: string;
   audience?: Audience;
   slug: string;
   name: string;
   image: string;
+  /** Unit selling price paid, in rupees (frozen at checkout). */
   price: number;
+  /** Unit MRP at checkout, in rupees. Absent on older/sample orders. */
+  mrp?: number;
+  /** Variant SKU. Absent on older/sample orders. */
+  sku?: string;
   size: Size | null;
   color: string | null;
   quantity: number;
 }
 
 export interface Order {
+  /** Customer-facing order number, e.g. MM7K2Q9XW4. */
   id: string;
   createdAt: string;
   items: OrderItem[];
@@ -264,6 +341,8 @@ export interface Order {
   paymentMethod: PaymentMethod;
   /** Present for orders paid through Razorpay; absent on older/sample orders. */
   payment?: PaymentRecord;
+  /** While payment is pending: when the reserved stock is released (ISO). */
+  reservedUntil?: string | null;
   couponCode: string | null;
   subtotal: number;
   discount: number;
@@ -273,6 +352,58 @@ export interface Order {
   status: OrderStatus;
   /** ISO timestamps per reached status, for the tracking timeline. */
   history: Partial<Record<OrderStatus, string>>;
+}
+
+/**
+ * An order as the storefront shows it (from /api/v1/orders), which may also be waiting for
+ * payment or have ended unpaid. Every `Order` is a valid `StoreOrder`.
+ */
+export interface StoreOrder extends Omit<Order, "status" | "history"> {
+  status: StoreOrderStatus;
+  history: Partial<Record<StoreOrderStatus, string>>;
+  /**
+   * Payment as far as the customer is concerned: pending (not paid yet), failed (the last attempt
+   * failed — they can try again while the order is reserved), paid or refunded.
+   */
+  paymentState?: "pending" | "failed" | "paid" | "refunded";
+}
+
+/** POST /api/v1/payments/razorpay/create and /payments/:id/retry — what Razorpay Checkout needs. */
+export interface PaymentStart {
+  /** Public Key ID only — never the secret. */
+  keyId: string;
+  mode: "test" | "live";
+  razorpayOrderId: string;
+  /** Exactly the stored order total, in paise. */
+  amountPaise: number;
+  currency: "INR";
+  orderId: string;
+  attempt: number;
+  /** When the stock hold ends (ISO); Checkout closes itself before then. */
+  reservedUntil: string;
+  timeoutSeconds: number;
+  prefill: { name: string; email: string; contact: string };
+}
+
+/** GET /api/v1/payments/:id/status */
+export interface PaymentStatusView {
+  orderId: string;
+  status: StoreOrderStatus;
+  paymentState: NonNullable<StoreOrder["paymentState"]>;
+  reservedUntil: string | null;
+  /** Payment can be started (or retried) now. */
+  canPay: boolean;
+  attempts: { attempt: number; status: string; createdAt: string; failure: string | null }[];
+}
+
+/** POST /api/v1/checkout/orders response. */
+export interface PlacedOrder {
+  order: StoreOrder;
+  /**
+   * Guests only: proves this browser placed the order (send as the X-Order-Token header to read
+   * it again). Never put it in a URL.
+   */
+  accessToken: string | null;
 }
 
 export interface Review {

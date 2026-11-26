@@ -2,21 +2,22 @@
 
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { MAX_LINE_QUANTITY, type CartItem, type CartSnapshot, type Product, type Size } from "@/types";
+import { MAX_LINE_QUANTITY, type CartItem, type CartSnapshot, type CheckoutCoupon, type CheckoutSource, type Product, type Size } from "@/types";
 import { ApiError, errorMessage, type Method } from "@/lib/api-client";
 import { customerApi } from "@/lib/customer-api";
-import { validateCoupon, type CouponCheck } from "@/lib/pricing";
+import { fetchQuote } from "@/lib/checkout-api";
 import { toast } from "@/store/ui-store";
 
 /**
  * The shopping bag. The server (/api/v1/cart) is the source of truth for every line, price and
  * stock figure — guests included, through an HttpOnly guest cookie. This store mirrors the last
  * server response for the UI, applies quantity changes optimistically, and reconciles with the
- * server's answer. Only the coupon code is kept in the browser (coupons are checked again,
- * server-side, at checkout).
+ * server's answer. Only the chosen coupon code is kept in the browser; whether it applies, and
+ * its discount, is always decided by the server (/api/v1/checkout/validate).
  */
 
 export type AddResult = { ok: true; quantity: number } | { ok: false; error: string };
+export type CouponResult = { ok: true; coupon: CheckoutCoupon } | { ok: false; error: string };
 export type CartStatus = "idle" | "loading" | "ready" | "error";
 
 interface CartState {
@@ -31,8 +32,11 @@ interface CartState {
   updateQuantity: (key: string, quantity: number) => Promise<AddResult>;
   removeItem: (key: string) => Promise<boolean>;
   clear: () => Promise<void>;
-  applyCoupon: (code: string, subtotal: number) => CouponCheck;
+  /** Checks the code on the server against the bag (or Buy Now line) and keeps it if it applies. */
+  applyCoupon: (code: string, source?: CheckoutSource) => Promise<CouponResult>;
   removeCoupon: () => void;
+  /** After an order: the server has already emptied the bag — mirror that. */
+  orderPlaced: () => void;
 }
 
 /* ---------- One-time import of bags saved in the browser before bags lived on the server ---------- */
@@ -187,13 +191,27 @@ export const useCartStore = create<CartState>()(
           }
         },
 
-        applyCoupon: (code, subtotal) => {
-          const result = validateCoupon(code, subtotal);
-          if (result.ok) set({ couponCode: result.coupon.code });
-          return result;
+        applyCoupon: async (code, source = { type: "cart" }) => {
+          const wanted = code.trim().toUpperCase();
+          if (!wanted) return { ok: false, error: "Please enter a coupon code." };
+          if (!/^[A-Z0-9_-]{1,40}$/.test(wanted)) return { ok: false, error: `"${wanted}" is not a valid coupon code.` };
+          try {
+            const { coupon } = await fetchQuote(source, wanted);
+            if (!coupon) return { ok: false, error: "Add something to your bag to use a coupon." };
+            if (coupon.status !== "applied") return { ok: false, error: coupon.message ?? `${wanted} can't be used for this order.` };
+            set({ couponCode: coupon.code });
+            return { ok: true, coupon };
+          } catch (err) {
+            return { ok: false, error: errorMessage(err) };
+          }
         },
 
         removeCoupon: () => set({ couponCode: null }),
+
+        orderPlaced: () => {
+          ++seq; // ignore any response still in flight for the old bag
+          set({ items: [], couponCode: null, status: "ready", error: null });
+        },
       };
     },
     {

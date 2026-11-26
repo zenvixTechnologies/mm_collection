@@ -179,7 +179,7 @@ function Profile() {
 }
 
 function RecentOrders() {
-  const orders = useMyOrders();
+  const { orders } = useMyOrders();
   return (
     <Card
       title="My Orders"

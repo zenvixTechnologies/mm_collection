@@ -2,18 +2,18 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Package, PackageSearch, Search } from "lucide-react";
+import { ArrowLeft, Loader2, Package, PackageSearch, RotateCw, Search } from "lucide-react";
 import { useState } from "react";
-import type { Order } from "@/types";
-import { sampleOrders } from "@/data/orders";
+import type { StoreOrder } from "@/types";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { useMyOrders } from "@/hooks/use-my-orders";
+import { useOrder } from "@/hooks/use-order";
 import { formatDate, formatPrice } from "@/lib/utils";
 import { useCurrentUser } from "@/store/auth-store";
-import { findOrder, useOrderStore } from "@/store/order-store";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ProductImage } from "@/components/ui/ProductImage";
+import { PayNow } from "@/components/checkout/PayNow";
 import { AccountShell } from "./AccountNav";
 import { AddressBlock, OrderItems, OrderTimeline, OrderTotals, PAYMENT_LABEL, StatusBadge } from "./OrderParts";
 
@@ -21,15 +21,23 @@ import { AddressBlock, OrderItems, OrderTimeline, OrderTotals, PAYMENT_LABEL, St
 
 export function OrdersListView() {
   const hydrated = useHydrated();
-  const orders = useMyOrders();
+  const { orders, status, error, hasMore, loadingMore, loadMore, retry } = useMyOrders();
   const user = useCurrentUser();
 
   return (
     <AccountShell title="My Orders">
-      {!hydrated ? (
+      {!hydrated || status === "loading" ? (
         <div className="space-y-4">
           <div className="skeleton h-40 rounded-2xl" />
           <div className="skeleton h-40 rounded-2xl" />
+        </div>
+      ) : status === "error" ? (
+        <div className="rounded-2xl border border-line">
+          <EmptyState icon={<Package size={40} />} title="We couldn't load your orders" description={error ?? "Please try again."}>
+            <button type="button" onClick={retry} className="btn-primary mt-7">
+              <RotateCw size={16} /> Try again
+            </button>
+          </EmptyState>
         </div>
       ) : orders.length === 0 ? (
         <div className="rounded-2xl border border-line">
@@ -39,7 +47,7 @@ export function OrdersListView() {
             description={
               user
                 ? "When you place an order it will appear here."
-                : "Orders placed on this device appear here. Log in with the demo account to see sample order history."
+                : "Orders you place as a guest on this device appear here. Log in to see your account's order history."
             }
             actionLabel="Start Shopping"
             actionHref="/shop"
@@ -69,13 +77,20 @@ export function OrdersListView() {
               </li>
             ))}
           </ul>
+          {hasMore && (
+            <div className="mt-6 text-center">
+              <button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="btn-outline min-h-11 px-8">
+                {loadingMore && <Loader2 size={16} className="animate-spin" />} {loadingMore ? "Loading…" : "Load more orders"}
+              </button>
+            </div>
+          )}
         </>
       )}
     </AccountShell>
   );
 }
 
-function OrderCard({ order }: { order: Order }) {
+function OrderCard({ order }: { order: StoreOrder }) {
   const count = order.items.reduce((n, i) => n + i.quantity, 0);
   return (
     <article className="rounded-2xl border border-line transition-shadow hover:shadow-[var(--shadow-card)]">
@@ -93,7 +108,7 @@ function OrderCard({ order }: { order: Order }) {
       <div className="flex flex-wrap items-center gap-4 px-5 py-4">
         <div className="flex -space-x-3">
           {order.items.slice(0, 3).map((it) => (
-            <div key={`${it.productId}-${it.size}`} className="relative h-16 w-13 overflow-hidden rounded-lg border-2 border-white bg-sand">
+            <div key={it.sku ?? `${it.productId}-${it.size}`} className="relative h-16 w-13 overflow-hidden rounded-lg border-2 border-white bg-sand">
               <ProductImage src={it.image} alt={it.name} fill sizes="52px" />
             </div>
           ))}
@@ -121,13 +136,25 @@ function OrderCard({ order }: { order: Order }) {
 
 export function OrderDetailView({ id }: { id: string }) {
   const hydrated = useHydrated();
-  const placed = useOrderStore((s) => s.orders);
-  const order = hydrated ? findOrder(placed, id) : null;
+  const { order, status, error, retry } = useOrder(hydrated ? id : null);
 
-  if (!hydrated) {
+  if (!hydrated || status === "loading") {
     return (
       <AccountShell title="Order Details">
         <div className="skeleton h-96 rounded-2xl" />
+      </AccountShell>
+    );
+  }
+  if (status === "error") {
+    return (
+      <AccountShell title="Order Details">
+        <div className="rounded-2xl border border-line">
+          <EmptyState icon={<PackageSearch size={40} />} title="We couldn't load this order" description={error ?? "Please try again."}>
+            <button type="button" onClick={retry} className="btn-primary mt-7">
+              <RotateCw size={16} /> Try again
+            </button>
+          </EmptyState>
+        </div>
       </AccountShell>
     );
   }
@@ -135,7 +162,13 @@ export function OrderDetailView({ id }: { id: string }) {
     return (
       <AccountShell title="Order Details">
         <div className="rounded-2xl border border-line">
-          <EmptyState icon={<PackageSearch size={40} />} title="Order not found" description={`We couldn't find order #${id}.`} actionLabel="Back to My Orders" actionHref="/account/orders" />
+          <EmptyState
+            icon={<PackageSearch size={40} />}
+            title="Order not found"
+            description={`We couldn't find order #${id}. If you placed it while logged in, log in to see it.`}
+            actionLabel="Back to My Orders"
+            actionHref="/account/orders"
+          />
         </div>
       </AccountShell>
     );
@@ -156,6 +189,7 @@ export function OrderDetailView({ id }: { id: string }) {
             <StatusBadge status={order.status} />
           </div>
           <OrderTimeline order={order} />
+          <PayNow order={order} onChange={retry} />
         </section>
         <div className="grid gap-5 md:grid-cols-[1fr_280px]">
           <section className="rounded-2xl border border-line p-5 sm:p-6">
@@ -187,23 +221,20 @@ export function OrderDetailView({ id }: { id: string }) {
 export function TrackOrderView({ initialId }: { initialId: string }) {
   const hydrated = useHydrated();
   const router = useRouter();
-  const placed = useOrderStore((s) => s.orders);
   const [input, setInput] = useState(initialId);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const order = hydrated && initialId ? findOrder(placed, initialId) : null;
+  const validId = /^MM[A-Z0-9]{4,12}$/.test(initialId);
+  // Only the order's owner can see it: the signed-in customer, or the browser it was placed in.
+  const { order, status } = useOrder(hydrated && validId ? initialId : null);
+  const loading = hydrated && validId && status === "loading";
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const id = input.trim().toUpperCase();
     if (!id) return setError("Please enter your order ID.");
-    if (!/^MM[A-Z0-9]{4,12}$/.test(id)) return setError("Order IDs start with “MM”, e.g. MM24A7K1.");
+    if (!/^MM[A-Z0-9]{4,12}$/.test(id)) return setError("Order IDs start with “MM”, e.g. MM7K2Q9XW4.");
     setError("");
-    setLoading(true);
-    window.setTimeout(() => {
-      setLoading(false);
-      router.replace(`/track-order?id=${id}`);
-    }, 400);
+    router.replace(`/track-order?id=${id}`);
   };
 
   return (
@@ -225,7 +256,7 @@ export function TrackOrderView({ initialId }: { initialId: string }) {
               setInput(e.target.value.toUpperCase());
               setError("");
             }}
-            placeholder="e.g. MM24A7K1"
+            placeholder="e.g. MM7K2Q9XW4"
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? "order-id-error" : "order-id-hint"}
             className="field-input pl-11 uppercase placeholder:normal-case"
@@ -241,18 +272,11 @@ export function TrackOrderView({ initialId }: { initialId: string }) {
         </p>
       ) : (
         <p id="order-id-hint" className="mt-2 text-[13px] text-muted">
-          Try a sample order: {sampleOrders.slice(0, 3).map((o, i) => (
-            <span key={o.id}>
-              {i > 0 && ", "}
-              <button type="button" className="font-semibold text-ink underline underline-offset-2" onClick={() => router.replace(`/track-order?id=${o.id}`)}>
-                {o.id}
-              </button>
-            </span>
-          ))}
+          Your order ID is in your order confirmation. Orders placed while logged in need you to be logged in to track them.
         </p>
       )}
 
-      {hydrated && initialId && (
+      {hydrated && initialId && !loading && (
         <div className="mt-10" aria-live="polite">
           {order ? (
             <section className="rounded-2xl border border-line p-5 sm:p-7">
@@ -270,14 +294,18 @@ export function TrackOrderView({ initialId }: { initialId: string }) {
               </div>
               <OrderTimeline order={order} />
               <p className="mt-8 rounded-xl bg-canvas px-4 py-3 text-xs text-muted">
-                Tracking shown here is sample data for this demo store; it is not connected to a courier.
+                {order.status === "Payment Pending"
+                  ? "This order is waiting for payment. It moves to “Order Placed” once payment is confirmed."
+                  : "Courier tracking details will appear here once your order ships."}
               </p>
             </section>
           ) : (
             <div className="rounded-2xl bg-canvas px-6 py-12 text-center">
               <PackageSearch size={36} className="mx-auto text-accent" />
               <h2 className="mt-4 text-lg font-semibold">We couldn&apos;t find order #{initialId}</h2>
-              <p className="mt-1 text-sm text-muted">Check the ID in your confirmation, or contact us for help.</p>
+              <p className="mt-1 text-sm text-muted">
+                Check the ID in your confirmation{status === "not-found" ? ", and log in if you placed it with your account" : ""} — or contact us for help.
+              </p>
               <Link href="/contact" className="btn-outline mt-5">
                 Contact support
               </Link>

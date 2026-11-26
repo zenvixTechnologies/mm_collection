@@ -73,6 +73,11 @@ const StoreSettingsSchema = new Schema(
       },
       reservationMinutes: { type: Number, min: 5, max: 60, default: 15 },
     },
+    /** Default page title/description for search results and link previews. */
+    seo: {
+      title: { type: String, trim: true, maxlength: 70, default: "" },
+      description: { type: String, trim: true, maxlength: 160, default: "" },
+    },
     homepage: {
       sections: { type: [HomepageSectionSchema], default: [] },
       featuredProducts: { type: [{ type: Schema.Types.ObjectId, ref: "Product" }], default: [] },

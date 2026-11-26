@@ -96,10 +96,10 @@ export interface AdminCategory extends Omit<Category, "id" | "slug"> {
 
 /* ---------- Orders, customers, payments ---------- */
 
-/** "Cancelled" exists only on the admin side until the storefront learns to show it. */
-export type AdminOrderStatus = OrderStatus | "Cancelled";
+/** Fulfilment statuses plus the ones an order can have before or instead of being paid. */
+export type AdminOrderStatus = OrderStatus | "Cancelled" | "Payment Pending" | "Payment Failed" | "Expired";
 
-export type PaymentStatus = "created" | "authorized" | "captured" | "failed" | "refunded" | "partially_refunded";
+export type PaymentStatus = "created" | "pending" | "authorized" | "captured" | "failed" | "refunded" | "partially_refunded";
 
 export interface ShipmentTracking {
   courier: string;
@@ -116,6 +116,25 @@ export interface AdminOrder extends Omit<Order, "status" | "history"> {
   tracking?: ShipmentTracking;
   /** Private notes visible only to staff. */
   notes: AdminNote[];
+  /** From the API: placed without an account. */
+  guest?: boolean;
+  /** Rupees refunded so far (from Razorpay-confirmed refunds). */
+  refunded?: number;
+  /** Something that needs staff attention (e.g. paid after the stock was released). */
+  exception?: { code: string; message: string; at: string | null } | null;
+  /** Every status change with who made it. */
+  timeline?: { status: AdminOrderStatus; at: string; by: string; note: string }[];
+  /** Statuses the server will accept next for this order. */
+  allowedTransitions?: AdminOrderStatus[];
+}
+
+/** One page of a server-paginated admin list. */
+export interface AdminPage<T> {
+  items: T[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
 }
 
 export interface AdminNote {
@@ -165,6 +184,32 @@ export interface PaymentTransaction {
   mode: "test" | "live";
   createdAt: string;
   errorReason?: string;
+  /** From the API: attempt number for the store order (1, 2… after retries). */
+  attempt?: number;
+  /** How the success was confirmed: checkout signature check, webhook or reconciliation. */
+  verifiedBy?: "verify" | "webhook" | "reconcile" | null;
+  capturedAt?: string | null;
+}
+
+export interface PaymentRefund {
+  razorpayRefundId: string;
+  amount: number;
+  status: "pending" | "processed" | "failed";
+  reason: string;
+  source: "admin" | "webhook" | "sync";
+  by: string | null;
+  createdAt: string | null;
+  processedAt: string | null;
+}
+
+/** GET /api/v1/admin/payments/:id */
+export interface PaymentDetailView {
+  payment: PaymentTransaction;
+  failures: { razorpayPaymentId: string; code: string | null; description: string | null; method: string | null; source: string; at: string }[];
+  refunds: PaymentRefund[];
+  webhooks: { type: string; status: string; attempts: number; at: string; processedAt: string | null; error: string | null }[];
+  order: { id: string; status: AdminOrderStatus; total: number; paymentStatus: PaymentStatus } | null;
+  refundable: number;
 }
 
 /* ---------- Coupons & offers ---------- */
@@ -177,6 +222,25 @@ export interface AdminCoupon extends Coupon {
   usageLimit: number | null;
   startsAt: string;
   endsAt: string | null;
+  /** Uses allowed per customer (by account or email); null = unlimited. */
+  perCustomerLimit?: number | null;
+  /** Shown in the storefront's "available coupons" list. */
+  listed?: boolean;
+  /** Public product IDs / category slugs the coupon is limited to (empty = everything). */
+  products?: string[];
+  categories?: string[];
+  /** Never discounted. */
+  excludedProducts?: string[];
+  excludedCategories?: string[];
+}
+
+export interface CouponUsage {
+  orderId: string;
+  customer: string;
+  email: string;
+  discount: number;
+  status: "reserved" | "redeemed" | "released";
+  at: string;
 }
 
 export interface AdminOffer extends Offer {
@@ -213,6 +277,9 @@ export interface HomepageBanner {
   active: boolean;
   startsAt: string | null;
   endsAt: string | null;
+  /** From the API: Cloudinary public ID of the image (absent for older, non-Cloudinary images). */
+  imagePublicId?: string | null;
+  sortOrder?: number;
 }
 
 export interface HomepageSection {
@@ -253,6 +320,19 @@ export interface StoreSettings {
   social: { instagram: string; facebook: string; youtube: string };
   policies: { returnWindowDays: number; exchangeOnly: boolean; returnPolicySummary: string; privacyContact: string };
   notifications: { newOrder: boolean; lowStock: boolean; paymentFailed: boolean; dailySummary: boolean };
+  /** From the API: default search title/description. */
+  seo?: { title: string; description: string };
+}
+
+/** GET /api/v1/admin/settings — editable settings plus read-only facts that can't be changed here. */
+export interface AdminSettingsView {
+  settings: StoreSettings;
+  shipping: ShippingSettings;
+  /** Payment gateway status from the server environment — never any secret, key ID masked. */
+  payments: { configured: boolean; mode: "test" | "live" | null; keyIdMasked: string | null; webhookConfigured: boolean };
+  locked: { currency: "INR"; country: "India"; codEnabled: false; shippingNotice: "Shipping Charges Applicable" };
+  /** Send back as `version` to avoid overwriting someone else's newer changes. */
+  version: string;
 }
 
 /* ---------- Dashboard ---------- */

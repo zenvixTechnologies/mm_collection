@@ -15,6 +15,20 @@ export const API_ERROR_CODES = [
   "NOT_FOUND",
   "METHOD_NOT_ALLOWED",
   "CONFLICT",
+  /** Checkout: an item is unavailable or short of stock — re-validate and show the issues. */
+  "CART_CHANGED",
+  /** Checkout: the total differs from the one the customer saw (a price changed). */
+  "PRICE_CHANGED",
+  /** Checkout: the coupon can't be used for this order. */
+  "COUPON_INVALID",
+  /** Payment: the order's stock hold has run out — a new order is needed. */
+  "ORDER_EXPIRED",
+  /** Payment: an earlier payment for this order is still being processed. */
+  "PAYMENT_IN_PROGRESS",
+  /** Payment: the order is already paid. */
+  "ALREADY_PAID",
+  /** Payment: the payment couldn't be verified (bad signature, wrong order, amount or currency). */
+  "PAYMENT_INVALID",
   "PAYLOAD_TOO_LARGE",
   "UNSUPPORTED_MEDIA_TYPE",
   "RATE_LIMITED",

@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDown, ArrowUp, ExternalLink, GalleryHorizontalEnd, Image as ImageIcon, LayoutList, Pencil, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ExternalLink, GalleryHorizontalEnd, Image as ImageIcon, LayoutList, Loader2, Pencil, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
-import type { BannerPlacement, HomepageBanner } from "@/types/admin";
-import { MOCK_NOW, istDateKey } from "@/data/admin/mock-utils";
+import type { BannerPlacement, HomepageBanner, HomepageSection } from "@/types/admin";
+import { istDateKey } from "@/data/admin/mock-utils";
 import { getAudience } from "@/data/audiences";
+import { useAdminQuery } from "@/hooks/use-admin-query";
+import { adminApi, errorMessage, AdminApiError } from "@/lib/admin-api";
+import { imageDetails } from "@/lib/admin-upload";
 import { cn, formatDate, formatPrice } from "@/lib/utils";
-import { uid, useAdminStore } from "@/store/admin-store";
+import { useAdminStore } from "@/store/admin-store";
 import { toast } from "@/store/ui-store";
 import { Dialog } from "@/components/ui/Dialog";
 import { ProductImage } from "@/components/ui/ProductImage";
@@ -17,6 +20,13 @@ import { SelectField, Switch, TextField } from "../ui/FormControls";
 import { SingleImageUpload } from "../ui/ImageUpload";
 import { PageHeader } from "../ui/PageHeader";
 import { Panel } from "../ui/Panel";
+import { LoadError } from "../ui/QueryState";
+
+interface HomepageData {
+  banners: HomepageBanner[];
+  featuredProductIds: string[];
+  sections: HomepageSection[];
+}
 
 const MAX_FEATURED = 8;
 const ASPECT: Record<BannerPlacement, string> = { hero: "aspect-[4/5]", promo: "aspect-[21/9]" };
@@ -24,7 +34,7 @@ const toDateInput = (iso: string | null) => (iso ? istDateKey(iso) : "");
 const fromDateInput = (d: string, end = false) => (d ? new Date(`${d}T${end ? "23:59:00" : "00:00:00"}+05:30`).toISOString() : null);
 
 function bannerState(b: HomepageBanner) {
-  const now = MOCK_NOW.getTime();
+  const now = Date.now();
   if (!b.active) return { label: "Off", tone: "neutral" as const };
   if (b.startsAt && new Date(b.startsAt).getTime() > now) return { label: `From ${formatDate(b.startsAt)}`, tone: "gold" as const };
   if (b.endsAt && new Date(b.endsAt).getTime() < now) return { label: "Ended", tone: "muted" as const };
@@ -33,12 +43,12 @@ function bannerState(b: HomepageBanner) {
 
 /* ---------- banner form ---------- */
 
-function BannerForm({ banner, placement, onDone }: { banner: HomepageBanner | null; placement: BannerPlacement; onDone: () => void }) {
-  const save = useAdminStore((s) => s.saveBanner);
+function BannerForm({ banner, placement, onDone }: { banner: HomepageBanner | null; placement: BannerPlacement; onDone: (saved: boolean) => void }) {
+  const [saving, setSaving] = useState(false);
   const [b, setB] = useState<HomepageBanner>(
     () =>
       banner ?? {
-        id: uid("bn"),
+        id: "",
         placement,
         eyebrow: "",
         title: "",
@@ -54,22 +64,47 @@ function BannerForm({ banner, placement, onDone }: { banner: HomepageBanner | nu
   const [errors, setErrors] = useState<Record<string, string>>({});
   const set = <K extends keyof HomepageBanner>(k: K, v: HomepageBanner[K]) => setB((p) => ({ ...p, [k]: v }));
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     const errs: Record<string, string> = {};
     if (!b.title.trim()) errs.title = "Enter a headline.";
     if (!b.image) errs.image = "Upload a banner image.";
     if (!b.ctaHref.startsWith("/") && !b.ctaHref.startsWith("https://")) errs.ctaHref = "Use a store path like /shop or a full https:// link.";
-    if (b.startsAt && b.endsAt && b.endsAt < b.startsAt) errs.endsAt = "End date must be after the start date.";
+    if (b.startsAt && b.endsAt && b.endsAt <= b.startsAt) errs.endsAt = "End date must be after the start date.";
     setErrors(errs);
     if (Object.keys(errs).length) return;
-    save({ ...b, title: b.title.trim() });
-    toast.success(banner ? "Banner updated" : "Banner added");
-    onDone();
+    // The upload registry knows the Cloudinary public ID of images uploaded in this tab.
+    const details = imageDetails([b.image], b.title)[0];
+    const image = { url: b.image, publicId: details.publicId ?? (b.image === banner?.image ? banner?.imagePublicId : null) ?? null, width: details.width ?? null, height: details.height ?? null };
+    const body = {
+      placement: b.placement,
+      eyebrow: b.eyebrow.trim(),
+      title: b.title.trim(),
+      subtitle: b.subtitle.trim(),
+      ctaLabel: b.ctaLabel.trim(),
+      ctaHref: b.ctaHref.trim(),
+      image,
+      active: b.active,
+      startsAt: b.startsAt,
+      endsAt: b.endsAt,
+    };
+    setSaving(true);
+    try {
+      if (banner) await adminApi(`/banners/${banner.id}`, { method: "PATCH", body });
+      else await adminApi("/banners", { method: "POST", body });
+      toast.success(banner ? "Banner updated" : "Banner added");
+      onDone(true);
+    } catch (err) {
+      const issues = err instanceof AdminApiError ? err.issues : undefined;
+      const fieldErrs = Object.fromEntries((issues ?? []).map((i) => [i.path.split(".")[0], i.message]));
+      setErrors(Object.keys(fieldErrs).length ? fieldErrs : { form: errorMessage(err) });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <form onSubmit={submit} noValidate>
+    <form onSubmit={(e) => void submit(e)} noValidate>
       <div className="grid gap-5 px-5 py-5 md:grid-cols-[minmax(0,240px)_1fr]">
         <div>
           <p className="field-label">Image</p>
@@ -93,21 +128,27 @@ function BannerForm({ banner, placement, onDone }: { banner: HomepageBanner | nu
               { value: "promo", label: "Promotional strip" },
             ]}
           />
-          <TextField label="Eyebrow" value={b.eyebrow} placeholder="e.g. New Season" onChange={(e) => set("eyebrow", e.target.value)} />
-          <TextField className="sm:col-span-2" label="Headline" required value={b.title} error={errors.title} onChange={(e) => set("title", e.target.value)} data-autofocus />
-          <TextField className="sm:col-span-2" label="Supporting text" value={b.subtitle} onChange={(e) => set("subtitle", e.target.value)} />
-          <TextField label="Button label" value={b.ctaLabel} onChange={(e) => set("ctaLabel", e.target.value)} />
-          <TextField label="Button link" value={b.ctaHref} error={errors.ctaHref} onChange={(e) => set("ctaHref", e.target.value)} />
+          <TextField label="Eyebrow" maxLength={60} value={b.eyebrow} placeholder="e.g. New Season" onChange={(e) => set("eyebrow", e.target.value)} />
+          <TextField className="sm:col-span-2" label="Headline" required maxLength={120} value={b.title} error={errors.title} onChange={(e) => set("title", e.target.value)} data-autofocus />
+          <TextField className="sm:col-span-2" label="Supporting text" maxLength={300} value={b.subtitle} error={errors.subtitle} onChange={(e) => set("subtitle", e.target.value)} />
+          <TextField label="Button label" maxLength={40} value={b.ctaLabel} onChange={(e) => set("ctaLabel", e.target.value)} />
+          <TextField label="Button link" maxLength={300} value={b.ctaHref} error={errors.ctaHref} onChange={(e) => set("ctaHref", e.target.value)} />
           <TextField label="Show from" type="date" value={toDateInput(b.startsAt)} hint="Optional" onChange={(e) => set("startsAt", fromDateInput(e.target.value))} />
           <TextField label="Show until" type="date" value={toDateInput(b.endsAt)} error={errors.endsAt} hint="Optional" onChange={(e) => set("endsAt", fromDateInput(e.target.value, true))} />
           <Switch className="sm:col-span-2" label="Active" description="Inactive banners are saved but not shown" checked={b.active} onChange={(v) => set("active", v)} />
+          {(errors.form || errors.image) && b.image && (
+            <p className="field-error sm:col-span-2" role="alert">
+              {errors.form ?? errors.image}
+            </p>
+          )}
         </div>
       </div>
       <div className="flex flex-col-reverse gap-2 border-t border-line px-5 py-4 sm:flex-row sm:justify-end">
-        <button type="button" onClick={onDone} className="btn-ghost btn-sm">
+        <button type="button" onClick={() => onDone(false)} className="btn-ghost btn-sm" disabled={saving}>
           Cancel
         </button>
-        <button type="submit" className="btn-primary btn-sm">
+        <button type="submit" className="btn-primary btn-sm" disabled={saving}>
+          {saving && <Loader2 size={14} className="animate-spin" aria-hidden />}
           {banner ? "Save banner" : "Add banner"}
         </button>
       </div>
@@ -115,8 +156,25 @@ function BannerForm({ banner, placement, onDone }: { banner: HomepageBanner | nu
   );
 }
 
-function BannerCard({ b, onEdit, onDelete }: { b: HomepageBanner; onEdit: () => void; onDelete: () => void }) {
-  const save = useAdminStore((s) => s.saveBanner);
+function BannerCard({
+  b,
+  onEdit,
+  onDelete,
+  onToggle,
+  onMove,
+  first,
+  last,
+  busy,
+}: {
+  b: HomepageBanner;
+  onEdit: () => void;
+  onDelete: () => void;
+  onToggle: (active: boolean) => void;
+  onMove: (direction: -1 | 1) => void;
+  first: boolean;
+  last: boolean;
+  busy: boolean;
+}) {
   const state = bannerState(b);
   const hero = b.placement === "hero";
   return (
@@ -144,7 +202,13 @@ function BannerCard({ b, onEdit, onDelete }: { b: HomepageBanner; onEdit: () => 
           Button: <span className="font-medium text-ink">{b.ctaLabel}</span> → {b.ctaHref}
         </p>
         <div className="mt-auto flex items-center justify-end gap-1 pt-3">
-          <Switch hideLabel label={`${b.active ? "Turn off" : "Turn on"} “${b.title}”`} checked={b.active} onChange={(v) => save({ ...b, active: v })} className="mr-auto" />
+          <Switch hideLabel label={`${b.active ? "Turn off" : "Turn on"} “${b.title}”`} checked={b.active} disabled={busy} onChange={onToggle} className="mr-auto" />
+          <button type="button" className="icon-btn h-9 w-9 text-muted disabled:opacity-30" disabled={first || busy} onClick={() => onMove(-1)} aria-label={`Show “${b.title}” earlier`}>
+            <ArrowLeft size={15} />
+          </button>
+          <button type="button" className="icon-btn h-9 w-9 text-muted disabled:opacity-30" disabled={last || busy} onClick={() => onMove(1)} aria-label={`Show “${b.title}” later`}>
+            <ArrowRight size={15} />
+          </button>
           <button type="button" className="icon-btn h-9 w-9 text-muted" onClick={onEdit} aria-label={`Edit “${b.title}”`}>
             <Pencil size={15} />
           </button>
@@ -159,11 +223,10 @@ function BannerCard({ b, onEdit, onDelete }: { b: HomepageBanner; onEdit: () => 
 
 /* ---------- featured picker ---------- */
 
-function FeaturedPicker({ onDone }: { onDone: () => void }) {
+function FeaturedPicker({ current, onSave, onDone }: { current: string[]; onSave: (ids: string[]) => Promise<boolean>; onDone: () => void }) {
   const products = useAdminStore((s) => s.products);
-  const current = useAdminStore((s) => s.featuredProductIds);
-  const setFeatured = useAdminStore((s) => s.setFeaturedProducts);
   const [picked, setPicked] = useState<string[]>(current);
+  const [saving, setSaving] = useState(false);
   const [q, setQ] = useState("");
   const list = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -210,13 +273,15 @@ function FeaturedPicker({ onDone }: { onDone: () => void }) {
         <button
           type="button"
           className="btn-primary btn-sm"
-          onClick={() => {
-            setFeatured(picked);
-            toast.success("Featured products updated");
-            onDone();
+          disabled={saving}
+          onClick={async () => {
+            setSaving(true);
+            const ok = await onSave(picked);
+            setSaving(false);
+            if (ok) onDone();
           }}
         >
-          Save selection
+          {saving && <Loader2 size={14} className="animate-spin" aria-hidden />} Save selection
         </button>
       </div>
     </>
@@ -226,22 +291,40 @@ function FeaturedPicker({ onDone }: { onDone: () => void }) {
 /* ---------- page ---------- */
 
 export function HomepageView() {
-  const banners = useAdminStore((s) => s.banners);
-  const featuredIds = useAdminStore((s) => s.featuredProductIds);
+  const { data, status, error, reload, replace } = useAdminQuery<HomepageData>("/homepage");
   const products = useAdminStore((s) => s.products);
-  const sections = useAdminStore((s) => s.homepageSections);
-  const toggleSection = useAdminStore((s) => s.toggleSection);
-  const setFeatured = useAdminStore((s) => s.setFeaturedProducts);
-  const deleteBanner = useAdminStore((s) => s.deleteBanner);
+  const banners = data?.banners ?? [];
+  const featuredIds = data?.featuredProductIds ?? [];
+  const sections = data?.sections ?? [];
   const [form, setForm] = useState<{ open: boolean; banner: HomepageBanner | null; placement: BannerPlacement }>({ open: false, banner: null, placement: "hero" });
   const [picker, setPicker] = useState(false);
   const [deleting, setDeleting] = useState<HomepageBanner | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  /** Runs one change; on success shows the server's state (or reloads it). */
+  const run = async (key: string, fn: () => Promise<HomepageData | null>, message?: string) => {
+    setBusy(key);
+    try {
+      const next = await fn();
+      if (next) replace(next);
+      else reload();
+      if (message) toast.success(message);
+      return true;
+    } catch (err) {
+      toast.error(errorMessage(err));
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  };
+  const setFeatured = (ids: string[], message = "Featured products updated") =>
+    run("featured", async () => (await adminApi<HomepageData>("/homepage/featured", { method: "PUT", body: { productIds: ids } })).data, message);
 
   const featured = featuredIds.map((id) => products.find((p) => p.id === id)).filter((p): p is NonNullable<typeof p> => Boolean(p));
   const move = (i: number, d: -1 | 1) => {
     const next = [...featuredIds];
     [next[i], next[i + d]] = [next[i + d], next[i]];
-    setFeatured(next);
+    void setFeatured(next, "Order updated");
   };
 
   const bannerSection = (placement: BannerPlacement, title: string, description: string, icon: React.ReactNode) => {
@@ -262,8 +345,23 @@ export function HomepageView() {
       >
         {list.length ? (
           <ul className={cn("grid gap-4", placement === "hero" ? "lg:grid-cols-2" : "md:grid-cols-2")}>
-            {list.map((b) => (
-              <BannerCard key={b.id} b={b} onEdit={() => setForm({ open: true, banner: b, placement })} onDelete={() => setDeleting(b)} />
+            {list.map((b, i) => (
+              <BannerCard
+                key={b.id}
+                b={b}
+                first={i === 0}
+                last={i === list.length - 1}
+                busy={busy === b.id}
+                onEdit={() => setForm({ open: true, banner: b, placement })}
+                onDelete={() => setDeleting(b)}
+                onToggle={(active) =>
+                  void run(b.id, async () => {
+                    await adminApi(`/banners/${b.id}`, { method: "PATCH", body: { active } });
+                    return null;
+                  }, active ? "Banner turned on" : "Banner turned off")
+                }
+                onMove={(direction) => void run(b.id, async () => (await adminApi<HomepageData>(`/banners/${b.id}/move`, { method: "POST", body: { direction } })).data)}
+              />
             ))}
           </ul>
         ) : (
@@ -286,6 +384,16 @@ export function HomepageView() {
         }
       />
 
+      {status === "loading" ? (
+        <div className="space-y-6" role="status" aria-label="Loading">
+          <div className="skeleton h-64 rounded-2xl" />
+          <div className="skeleton h-48 rounded-2xl" />
+        </div>
+      ) : status === "error" ? (
+        <div className="card">
+          <LoadError title="Couldn't load the homepage settings" message={error} onRetry={reload} />
+        </div>
+      ) : (
       <div className="space-y-6">
         {bannerSection("hero", "Hero banners", "The large banner at the top. When several are live they rotate.", <ImageIcon size={16} className="text-gold-dark" aria-hidden />)}
         {bannerSection("promo", "Promotional banners", "Wide strips between homepage sections.", <GalleryHorizontalEnd size={16} className="text-gold-dark" aria-hidden />)}
@@ -313,7 +421,8 @@ export function HomepageView() {
                       <span className="absolute top-2 left-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-royal/85 px-1.5 text-[11px] font-bold text-gold-light">{i + 1}</span>
                       <button
                         type="button"
-                        onClick={() => setFeatured(featuredIds.filter((id) => id !== p.id))}
+                        onClick={() => void setFeatured(featuredIds.filter((id) => id !== p.id), "Removed from featured")}
+                        disabled={busy === "featured"}
                         className="absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-ink shadow hover:text-danger"
                         aria-label={`Remove ${p.name} from featured`}
                       >
@@ -356,19 +465,38 @@ export function HomepageView() {
             <ul className="space-y-4">
               {sections.map((s) => (
                 <li key={s.id}>
-                  <Switch label={s.label} description={s.description} checked={s.visible} onChange={() => toggleSection(s.id)} />
+                  <Switch
+                    label={s.label}
+                    description={s.description}
+                    checked={s.visible}
+                    disabled={busy === `section-${s.id}`}
+                    onChange={(visible) =>
+                      void run(`section-${s.id}`, async () => (await adminApi<HomepageData>("/homepage/sections", { method: "PATCH", body: { key: s.id, visible } })).data)
+                    }
+                  />
                 </li>
               ))}
             </ul>
           </Panel>
         </div>
       </div>
+      )}
 
       <Dialog open={form.open} onClose={() => setForm((f) => ({ ...f, open: false }))} title={form.banner ? "Edit banner" : "Add banner"} size="xl">
-        {form.open && <BannerForm key={form.banner?.id ?? `new-${form.placement}`} banner={form.banner} placement={form.placement} onDone={() => setForm((f) => ({ ...f, open: false }))} />}
+        {form.open && (
+          <BannerForm
+            key={form.banner?.id ?? `new-${form.placement}`}
+            banner={form.banner}
+            placement={form.placement}
+            onDone={(saved) => {
+              setForm((f) => ({ ...f, open: false }));
+              if (saved) reload();
+            }}
+          />
+        )}
       </Dialog>
       <Dialog open={picker} onClose={() => setPicker(false)} title="Choose featured products" size="lg">
-        {picker && <FeaturedPicker onDone={() => setPicker(false)} />}
+        {picker && <FeaturedPicker current={featuredIds} onSave={(ids) => setFeatured(ids)} onDone={() => setPicker(false)} />}
       </Dialog>
       <ConfirmDialog
         open={deleting !== null}
@@ -381,8 +509,12 @@ export function HomepageView() {
         }
         confirmLabel="Delete"
         onConfirm={() => {
-          if (deleting) deleteBanner(deleting.id);
-          toast.success("Banner deleted");
+          if (!deleting) return;
+          const id = deleting.id;
+          void run(id, async () => {
+            await adminApi(`/banners/${id}`, { method: "DELETE" });
+            return null;
+          }, "Banner deleted");
         }}
       />
     </>

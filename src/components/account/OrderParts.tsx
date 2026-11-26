@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Check, CheckCircle2, ClipboardCheck, Home, Package, PackageCheck, Truck } from "lucide-react";
-import type { Order, OrderStatus, PaymentMethod } from "@/types";
+import type { OrderStatus, PaymentMethod, StoreOrder, StoreOrderStatus } from "@/types";
 import { ORDER_STATUSES } from "@/types";
 import { cn, formatDate, formatPrice } from "@/lib/utils";
 import { ProductImage } from "@/components/ui/ProductImage";
@@ -17,25 +17,38 @@ export const PAYMENT_LABEL: Record<PaymentMethod, string> = {
 
 const STATUS_ICON = [ClipboardCheck, CheckCircle2, Package, Truck, Home, PackageCheck];
 
-export function StatusBadge({ status }: { status: OrderStatus }) {
+export function StatusBadge({ status }: { status: StoreOrderStatus }) {
   const delivered = status === "Delivered";
   const moving = status === "Shipped" || status === "Out for Delivery";
+  const waiting = status === "Payment Pending";
+  const ended = status === "Cancelled" || status === "Expired" || status === "Payment Failed";
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
-        delivered ? "bg-success-soft text-success" : moving ? "bg-accent-soft text-accent" : "bg-sand text-ink",
+        delivered
+          ? "bg-success-soft text-success"
+          : moving
+            ? "bg-accent-soft text-accent"
+            : waiting
+              ? "bg-[#fdf6ea] text-warning"
+              : ended
+                ? "bg-canvas text-muted"
+                : "bg-sand text-ink",
       )}
     >
-      <span className={cn("h-1.5 w-1.5 rounded-full", delivered ? "bg-success" : moving ? "bg-accent" : "bg-ink")} />
+      <span
+        className={cn("h-1.5 w-1.5 rounded-full", delivered ? "bg-success" : moving ? "bg-accent" : waiting ? "bg-warning" : ended ? "bg-subtle" : "bg-ink")}
+      />
       {status}
     </span>
   );
 }
 
 /** Visual order-progress timeline (vertical on mobile, horizontal on desktop). */
-export function OrderTimeline({ order }: { order: Order }) {
-  const current = ORDER_STATUSES.indexOf(order.status);
+export function OrderTimeline({ order }: { order: StoreOrder }) {
+  // Orders waiting for payment, or that ended unpaid, haven't reached the first step yet.
+  const current = ORDER_STATUSES.indexOf(order.status as OrderStatus);
   return (
     <ol className="relative grid gap-0 md:grid-cols-6" aria-label="Order progress">
       {ORDER_STATUSES.map((s, i) => {
@@ -82,11 +95,11 @@ export function OrderTimeline({ order }: { order: Order }) {
   );
 }
 
-export function OrderItems({ order }: { order: Order }) {
+export function OrderItems({ order }: { order: StoreOrder }) {
   return (
     <ul className="divide-y divide-line">
       {order.items.map((it) => (
-        <li key={`${it.productId}-${it.size}-${it.color}`} className="flex gap-4 py-4 first:pt-0 last:pb-0">
+        <li key={it.sku ?? `${it.productId}-${it.size}-${it.color}`} className="flex gap-4 py-4 first:pt-0 last:pb-0">
           <Link href={`/product/${it.slug}`} className="relative h-24 w-[76px] shrink-0 overflow-hidden rounded-lg bg-sand">
             <ProductImage src={it.image} alt={it.name} fill sizes="76px" />
           </Link>
@@ -106,7 +119,7 @@ export function OrderItems({ order }: { order: Order }) {
   );
 }
 
-export function OrderTotals({ order }: { order: Order }) {
+export function OrderTotals({ order }: { order: StoreOrder }) {
   return (
     <dl className="space-y-2.5 text-sm">
       <div className="flex justify-between">
@@ -131,7 +144,7 @@ export function OrderTotals({ order }: { order: Order }) {
   );
 }
 
-export function AddressBlock({ order }: { order: Order }) {
+export function AddressBlock({ order }: { order: StoreOrder }) {
   const a = order.address;
   return (
     <address className="text-sm leading-6 text-muted not-italic">

@@ -5,6 +5,7 @@ import { motion, type Variants } from "framer-motion";
 import { ArrowRight, Star } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { IMG, portrait } from "@/data/images";
+import type { StorefrontBanner } from "@/types";
 import { useCatalog } from "@/components/catalog/CatalogProvider";
 import { formatPrice } from "@/lib/utils";
 import { useIntroStore } from "@/store/intro-store";
@@ -105,7 +106,11 @@ function MaskLine({ children, delay, state }: { children: ReactNode; delay: numb
   );
 }
 
-export function Hero() {
+/**
+ * Homepage hero. An active hero banner from the admin (text, button and main photo) replaces the
+ * built-in festive copy; with none live, the built-in design is shown.
+ */
+export function Hero({ banner = null }: { banner?: StorefrontBanner | null }) {
   const { state, d } = useRevealTiming();
   const featured = useCatalog().getProductBySlug(FEATURED_SLUG);
 
@@ -117,15 +122,23 @@ export function Hero() {
       <div className="container-page grid items-center gap-8 py-10 sm:py-12 lg:grid-cols-[1.05fr_1fr] lg:gap-12 lg:py-14">
         <div className="order-2 lg:order-1">
           <motion.p className="eyebrow" initial="hidden" animate={state} variants={rise(d(0.25), 12)}>
-            The Festive Edit · 2026
+            {banner ? banner.eyebrow : "The Festive Edit · 2026"}
           </motion.p>
           <h1 id="hero-heading" className="mt-3 font-display text-[44px] leading-[1.05] font-semibold sm:text-6xl lg:text-[68px]">
-            <MaskLine delay={d(0.35)} state={state}>
-              Dressed for every
-            </MaskLine>
-            <MaskLine delay={d(0.47)} state={state}>
-              <em className="text-accent not-italic sm:italic">beautiful</em> moment
-            </MaskLine>
+            {banner ? (
+              <MaskLine delay={d(0.35)} state={state}>
+                {banner.title}
+              </MaskLine>
+            ) : (
+              <>
+                <MaskLine delay={d(0.35)} state={state}>
+                  Dressed for every
+                </MaskLine>
+                <MaskLine delay={d(0.47)} state={state}>
+                  <em className="text-accent not-italic sm:italic">beautiful</em> moment
+                </MaskLine>
+              </>
+            )}
           </h1>
           <motion.p
             className="mt-5 max-w-md text-[16px] leading-7 text-muted"
@@ -133,11 +146,11 @@ export function Hero() {
             animate={state}
             variants={rise(d(0.6))}
           >
-            Kurtis, dresses, silk sarees and easy everyday wear — handpicked for comfort, quality and a perfect fit.
+            {banner ? banner.subtitle : "Kurtis, dresses, silk sarees and easy everyday wear — handpicked for comfort, quality and a perfect fit."}
           </motion.p>
           <motion.div className="mt-8 flex flex-wrap gap-3" initial="hidden" animate={state} variants={rise(d(0.85), 14)}>
-            <Link href="/shop" className="btn-primary group min-h-12 px-7">
-              Shop Now
+            <Link href={banner?.ctaHref ?? "/shop"} className="btn-primary group min-h-12 px-7">
+              {banner?.ctaLabel ?? "Shop Now"}
               <ArrowRight size={17} className="transition-transform group-hover:translate-x-0.5" />
             </Link>
             <Link href="/categories" className="btn-outline min-h-12 bg-transparent px-7">
@@ -195,7 +208,7 @@ export function Hero() {
             }
           >
             <ProductImage
-              src={portrait(IMG.blushMaxiDress)}
+              src={banner?.image ?? portrait(IMG.blushMaxiDress)}
               alt="Woman wearing a flowing blush floral maxi dress"
               fill
               priority

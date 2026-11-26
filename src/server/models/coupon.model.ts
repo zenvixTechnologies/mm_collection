@@ -22,9 +22,14 @@ const CouponSchema = new Schema(
     perCustomerLimit: { type: Number, min: 1, default: null },
     usageCount: { type: Number, min: 0, default: 0 },
     active: { type: Boolean, default: true },
+    /** Shown in the storefront's "available coupons" list. false = works only if the code is known. */
+    listed: { type: Boolean, default: true },
     /** Empty = whole catalogue. */
     categories: { type: [{ type: Schema.Types.ObjectId, ref: "Category" }], default: [] },
     products: { type: [{ type: Schema.Types.ObjectId, ref: "Product" }], default: [] },
+    /** Never discounted, even when inside an applicable category. */
+    excludedCategories: { type: [{ type: Schema.Types.ObjectId, ref: "Category" }], default: [] },
+    excludedProducts: { type: [{ type: Schema.Types.ObjectId, ref: "Product" }], default: [] },
   },
   baseOptions,
 );

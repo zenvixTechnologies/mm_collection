@@ -1,25 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { Download, Users } from "lucide-react";
-import { useMemo, useState } from "react";
-import type { CustomerWithStats } from "@/types/admin";
-import { MOCK_NOW } from "@/data/admin/mock-utils";
-import { customersWithStats } from "@/lib/admin/metrics";
+import { Download, Loader2, Users } from "lucide-react";
+import { useState } from "react";
+import type { AdminPage, CustomerWithStats } from "@/types/admin";
+import { useAdminQuery, withQuery } from "@/hooks/use-admin-query";
+import { useDebounced } from "@/hooks/use-debounced";
+import { adminApi, errorMessage } from "@/lib/admin-api";
 import { formatDate, formatPrice } from "@/lib/utils";
-import { useAdminStore } from "@/store/admin-store";
 import { toast } from "@/store/ui-store";
 import { Badge } from "../ui/Badge";
 import { downloadCsv } from "../ui/csv";
-import { DataTable, TableEmpty, type Column } from "../ui/DataTable";
+import { DataTable, TableEmpty, type Column, type SortState } from "../ui/DataTable";
 import { initials } from "../ui/format";
 import { PageHeader } from "../ui/PageHeader";
-import { SearchInput, Tabs, Toolbar } from "../ui/Toolbar";
+import { LoadError, TableSkeleton } from "../ui/QueryState";
+import { DateRangeFilter, SearchInput, Tabs, Toolbar } from "../ui/Toolbar";
 
 type Segment = "all" | "new" | "repeat" | "vip" | "blocked";
 
-/** Spend at which a customer counts as high value. */
+/** Spend at which a customer counts as high value (the server uses the same threshold). */
 export const VIP_SPEND = 10_000;
+
+/** Table column → server sort field. */
+const SORT_PARAM: Record<string, string> = { name: "name", orders: "orders", spent: "spent", last: "last" };
 
 export function Avatar({ name, size = "md" }: { name: string; size?: "md" | "lg" }) {
   return (
@@ -36,38 +40,51 @@ export function Avatar({ name, size = "md" }: { name: string; size?: "md" | "lg"
   );
 }
 
-function inSegment(c: CustomerWithStats, s: Segment) {
-  switch (s) {
-    case "new":
-      return MOCK_NOW.getTime() - new Date(c.joinedAt).getTime() <= 30 * 86_400_000;
-    case "repeat":
-      return c.orderCount >= 2;
-    case "vip":
-      return c.totalSpent >= VIP_SPEND;
-    case "blocked":
-      return c.status === "blocked";
-    default:
-      return true;
-  }
-}
+type CustomerPage = AdminPage<CustomerWithStats> & { segments: Partial<Record<Segment, number>> };
+
+const PAGE_SIZE = 20;
 
 export function CustomersView() {
-  const customers = useAdminStore((s) => s.customers);
-  const orders = useAdminStore((s) => s.orders);
   const [segment, setSegment] = useState<Segment>("all");
   const [q, setQ] = useState("");
-  const rows = useMemo(() => customersWithStats(customers, orders), [customers, orders]);
+  const [joined, setJoined] = useState({ from: "", to: "" });
+  const [sort, setSort] = useState<SortState>({ id: "spent", dir: "desc" });
+  const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
+  const term = useDebounced(q.trim());
+  const filters = { q: term, segment, from: joined.from, to: joined.to, sort: SORT_PARAM[sort.id] ?? "joined", dir: sort.dir };
+  const filterKey = JSON.stringify(filters);
+  const [lastKey, setLastKey] = useState(filterKey);
+  if (filterKey !== lastKey) {
+    setLastKey(filterKey);
+    setPage(1);
+  }
+  const { data, status, error, refreshing, reload } = useAdminQuery<CustomerPage>(withQuery("/customers", { ...filters, page, limit: PAGE_SIZE }));
+  const rows = data?.items ?? [];
+  const segCount = (s: Segment) => data?.segments?.[s] ?? 0;
 
-  const filtered = useMemo(() => {
-    const term = q.trim().toLowerCase();
-    return rows.filter(
-      (c) =>
-        inSegment(c, segment) &&
-        (!term || c.fullName.toLowerCase().includes(term) || c.email.toLowerCase().includes(term) || c.mobile.includes(term) || c.addresses[0]?.city.toLowerCase().includes(term)),
-    );
-  }, [rows, segment, q]);
-
-  const segCount = (s: Segment) => rows.filter((c) => inSegment(c, s)).length;
+  /** Every customer matching the current filters, page by page (for the CSV export). */
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const all: CustomerWithStats[] = [];
+      for (let p = 1; p <= 100; p++) {
+        const res = await adminApi<CustomerPage>(withQuery("/customers", { ...filters, page: p, limit: 100 }));
+        all.push(...res.data.items);
+        if (p >= res.data.totalPages) break;
+      }
+      downloadCsv(
+        "mm-customers.csv",
+        ["Name", "Email", "Mobile", "City", "Orders", "Total spent", "Joined", "Marketing opt-in", "Status"],
+        all.map((c) => [c.fullName, c.email, c.mobile, c.addresses[0]?.city, c.orderCount, c.totalSpent, c.joinedAt, c.marketingOptIn ? "yes" : "no", c.status]),
+      );
+      toast.success(`Exported ${all.length} customers`);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const columns: Column<CustomerWithStats>[] = [
     {
@@ -87,7 +104,7 @@ export function CustomersView() {
       ),
     },
     { id: "mobile", header: "Mobile", hideBelow: "lg", cell: (c) => <span className="whitespace-nowrap tabular-nums">+91 {c.mobile}</span> },
-    { id: "city", header: "Location", hideBelow: "xl", sortValue: (c) => c.addresses[0]?.city ?? "", cell: (c) => <span className="whitespace-nowrap">{c.addresses[0] ? `${c.addresses[0].city}, ${c.addresses[0].state}` : "—"}</span> },
+    { id: "city", header: "Location", hideBelow: "xl", cell: (c) => <span className="whitespace-nowrap">{c.addresses[0] ? `${c.addresses[0].city}, ${c.addresses[0].state}` : "—"}</span> },
     { id: "orders", header: "Orders", align: "right", sortValue: (c) => c.orderCount, cell: (c) => <span className="tabular-nums">{c.orderCount}</span> },
     {
       id: "spent",
@@ -112,7 +129,6 @@ export function CustomersView() {
       id: "status",
       header: "Status",
       hideBelow: "sm",
-      sortValue: (c) => c.status,
       cell: (c) => (c.status === "active" ? <Badge tone="success">Active</Badge> : <Badge tone="danger">Blocked</Badge>),
     },
   ];
@@ -124,19 +140,8 @@ export function CustomersView() {
         title="Customers"
         description="Everyone who has an account or has ordered. Open a profile to see their orders and addresses."
         actions={
-          <button
-            type="button"
-            className="btn-outline btn-sm"
-            onClick={() => {
-              downloadCsv(
-                "mm-customers.csv",
-                ["Name", "Email", "Mobile", "City", "Orders", "Total spent", "Joined", "Marketing opt-in", "Status"],
-                filtered.map((c) => [c.fullName, c.email, c.mobile, c.addresses[0]?.city, c.orderCount, c.totalSpent, c.joinedAt, c.marketingOptIn ? "yes" : "no", c.status]),
-              );
-              toast.success(`Exported ${filtered.length} customers`);
-            }}
-          >
-            <Download size={15} aria-hidden /> Export CSV
+          <button type="button" className="btn-outline btn-sm" disabled={exporting || !data?.total} onClick={() => void exportCsv()}>
+            {exporting ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <Download size={15} aria-hidden />} Export CSV
           </button>
         }
       />
@@ -156,21 +161,29 @@ export function CustomersView() {
           />
         </div>
         <Toolbar className="p-4">
-          <SearchInput value={q} onChange={setQ} placeholder="Name, email, mobile or city" label="Search customers" className="sm:max-w-sm sm:flex-1" />
+          <SearchInput value={q} onChange={setQ} placeholder="Name, email or mobile" label="Search customers" className="sm:max-w-sm sm:flex-1" />
+          <DateRangeFilter label="Joined" from={joined.from} to={joined.to} onChange={setJoined} className="sm:w-auto" />
           <p className="text-[13px] text-muted sm:ml-auto">
-            {filtered.length} customer{filtered.length === 1 ? "" : "s"}
+            {data?.total ?? 0} customer{data?.total === 1 ? "" : "s"}
             {segment === "vip" && ` · spent ${formatPrice(VIP_SPEND)}+`}
           </p>
         </Toolbar>
-        <DataTable
-          caption="Customers"
-          rows={filtered}
-          columns={columns}
-          getRowId={(c) => c.id}
-          resetKey={`${segment}|${q}`}
-          initialSort={{ id: "spent", dir: "desc" }}
-          empty={<TableEmpty icon={<Users size={24} />} title="No customers found" description="Try another segment or search." />}
-        />
+        {status === "loading" ? (
+          <TableSkeleton />
+        ) : status === "error" ? (
+          <LoadError title="Couldn't load customers" message={error} onRetry={reload} />
+        ) : (
+          <DataTable
+            caption="Customers"
+            rows={rows}
+            columns={columns}
+            getRowId={(c) => c.id}
+            sort={sort}
+            onSortChange={setSort}
+            server={{ page, totalPages: data?.totalPages ?? 1, total: data?.total ?? 0, limit: PAGE_SIZE, onPageChange: setPage, loading: refreshing }}
+            empty={<TableEmpty icon={<Users size={24} />} title="No customers found" description="Try another segment, date range or search." />}
+          />
+        )}
       </div>
     </>
   );

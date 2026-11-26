@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AnimatePresence } from "framer-motion";
 import { ArrowLeft, Lock, RotateCw, ShoppingBag } from "lucide-react";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { useCheckoutQuote } from "@/hooks/use-checkout-quote";
 import { calculateTotals } from "@/lib/pricing";
 import { formatPrice } from "@/lib/utils";
 import { useCartStore } from "@/store/cart-store";
@@ -14,14 +15,20 @@ import { CartLine } from "./CartLine";
 import { CouponForm } from "./CouponForm";
 import { OrderSummary } from "./OrderSummary";
 
+const CART_SOURCE = { type: "cart" } as const;
+
 export function CartView() {
   const hydrated = useHydrated();
   const items = useCartStore((s) => s.items);
   const couponCode = useCartStore((s) => s.couponCode);
   const status = useCartStore((s) => s.status);
   const loadError = useCartStore((s) => s.error);
-  const totals = calculateTotals(items, couponCode);
   const loading = !hydrated || status === "idle" || status === "loading";
+  // Totals and the coupon discount come from the server; until its quote arrives the bag's own
+  // (server) prices are shown without a coupon.
+  const bagKey = items.map((i) => `${i.key}:${i.quantity}:${i.price}`).join(",");
+  const { quote } = useCheckoutQuote(status === "ready" && items.length ? CART_SOURCE : null, couponCode, bagKey);
+  const totals = quote?.totals ?? calculateTotals(items, null);
 
   return (
     <div className="container-page pt-6 lg:pt-8">
@@ -75,7 +82,7 @@ export function CartView() {
 
           <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
             <div className="rounded-2xl border border-line p-5">
-              <CouponForm subtotal={totals.subtotal} />
+              <CouponForm subtotal={totals.subtotal} coupon={quote?.coupon} />
             </div>
             <OrderSummary totals={totals} couponCode={couponCode}>
               <Link href="/checkout" className="btn-accent mt-5 hidden min-h-13 w-full text-[15px] lg:flex">

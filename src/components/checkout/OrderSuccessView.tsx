@@ -2,25 +2,38 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Check, Copy, PackageSearch } from "lucide-react";
+import { Check, Copy, PackageSearch, RotateCw } from "lucide-react";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { useOrder } from "@/hooks/use-order";
 import { formatDate, formatPrice } from "@/lib/utils";
-import { findOrder, useOrderStore } from "@/store/order-store";
 import { toast } from "@/store/ui-store";
 import { AddressBlock, OrderItems, OrderTotals, PAYMENT_LABEL } from "@/components/account/OrderParts";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PayNow } from "./PayNow";
 
 export function OrderSuccessView({ id }: { id: string }) {
   const hydrated = useHydrated();
-  const orders = useOrderStore((s) => s.orders);
-  const order = hydrated && id ? findOrder(orders, id) : null;
+  // The order as stored on the server (guests: read with the access token saved at checkout).
+  const { order, status, error, retry } = useOrder(hydrated && id ? id.trim().toUpperCase() : null);
 
-  if (!hydrated) {
+  if (!hydrated || (id && status === "loading")) {
     return (
       <div className="container-page max-w-3xl py-16">
         <div className="skeleton mx-auto h-20 w-20 rounded-full" />
         <div className="skeleton mx-auto mt-6 h-8 w-2/3" />
         <div className="skeleton mt-10 h-64 rounded-2xl" />
+      </div>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <div className="container-page">
+        <EmptyState icon={<PackageSearch size={40} />} title="We couldn't load your order" description={error ?? "Please try again."}>
+          <button type="button" onClick={retry} className="btn-primary mt-7">
+            <RotateCw size={16} /> Try again
+          </button>
+        </EmptyState>
       </div>
     );
   }
@@ -31,7 +44,7 @@ export function OrderSuccessView({ id }: { id: string }) {
         <EmptyState
           icon={<PackageSearch size={40} />}
           title="Order not found"
-          description="We couldn't find that order on this device. You can look it up from the order tracking page."
+          description="We couldn't find that order on this device. Log in to see your orders, or look it up from the order tracking page."
           actionLabel="Track an order"
           actionHref="/track-order"
         />
@@ -62,9 +75,20 @@ export function OrderSuccessView({ id }: { id: string }) {
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
           <h1 className="mt-6 font-display text-4xl font-semibold sm:text-5xl">Thank you for your order!</h1>
           <p className="mx-auto mt-3 max-w-md text-muted">
-            Your order has been placed, {order.customer.fullName.split(" ")[0]}. A confirmation would be sent to{" "}
-            <strong className="text-ink">{order.customer.email}</strong>.
+            {order.status === "Payment Pending" ? (
+              <>
+                Your order has been received, {order.customer.fullName.split(" ")[0]}, and your items are reserved
+                {order.reservedUntil ? ` until ${formatDate(order.reservedUntil, true)}` : ""}. Payment is pending — we&apos;ll
+                confirm your order at <strong className="text-ink">{order.customer.email}</strong> once it&apos;s paid.
+              </>
+            ) : (
+              <>
+                Your order has been placed, {order.customer.fullName.split(" ")[0]}. A confirmation would be sent to{" "}
+                <strong className="text-ink">{order.customer.email}</strong>.
+              </>
+            )}
           </p>
+          <PayNow order={order} onChange={retry} />
           {order.payment ? (
             <p className="mx-auto mt-3 max-w-md text-xs text-muted">
               Paid {formatPrice(order.payment.amount)} via Razorpay · Payment ID {order.payment.razorpayPaymentId}
@@ -87,7 +111,10 @@ export function OrderSuccessView({ id }: { id: string }) {
             </button>
           </Info>
           <Info label="Order date">{formatDate(order.createdAt, true)}</Info>
-          <Info label="Payment">{PAYMENT_LABEL[order.paymentMethod]}</Info>
+          <Info label="Payment">
+            {PAYMENT_LABEL[order.paymentMethod]}
+            {order.status === "Payment Pending" && <span className="block text-xs text-warning">Pending</span>}
+          </Info>
           <Info label="Total amount">
             <span className="font-semibold">{formatPrice(order.total)}</span>
           </Info>

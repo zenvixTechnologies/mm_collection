@@ -74,9 +74,29 @@ const OrderSchema = new Schema(
       ],
       default: [],
     },
+    /** Razorpay order of the current payment attempt (history: the payments collection). */
     razorpayOrderId: { type: String, default: null },
-    /** Client-supplied key so a double-clicked "Pay" never creates two orders. */
+    /** The captured payment that paid this order. */
+    razorpayPaymentId: { type: String, default: null },
+    paymentGateway: { type: String, enum: ["razorpay", null], default: null },
+    /** Razorpay key mode the order was paid in. */
+    paymentMode: { type: String, enum: ["test", "live", null], default: null },
+    paidAt: { type: Date, default: null },
+    /** Number of Razorpay orders created for this order (attempt numbers 1…n). */
+    paymentAttemptCount: { type: Number, min: 0, default: 0 },
+    /** Short lock while a new payment attempt is being created, so retries can't race. */
+    paymentLockUntil: { type: Date, default: null },
+    /**
+     * Client-supplied key so a double-clicked "Place Order" never creates two orders. Stored
+     * prefixed with the customer/guest scope (`u:<userId>:<key>` / `g:<guestHash>:<key>`), so the
+     * unique index makes keys unique per shopper.
+     */
     idempotencyKey: { type: String, default: null },
+    /**
+     * Random per-order value; the guest access token is HMAC(server secret, order id + nonce), so
+     * the token itself is never stored. Never sent to clients.
+     */
+    accessNonce: { type: String, default: null, select: false },
     /** Stock is held until this time; a cron job expires unpaid orders after it. */
     reservationExpiresAt: { type: Date, default: null },
     stockReleased: { type: Boolean, default: false },
@@ -101,6 +121,7 @@ const OrderSchema = new Schema(
 
 OrderSchema.index({ orderNumber: 1 }, { unique: true });
 OrderSchema.index({ razorpayOrderId: 1 }, { unique: true, partialFilterExpression: { razorpayOrderId: { $type: "string" } } });
+OrderSchema.index({ razorpayPaymentId: 1 }, { unique: true, partialFilterExpression: { razorpayPaymentId: { $type: "string" } } });
 OrderSchema.index({ idempotencyKey: 1 }, { unique: true, partialFilterExpression: { idempotencyKey: { $type: "string" } } });
 OrderSchema.index({ user: 1, createdAt: -1 });
 OrderSchema.index({ "customer.email": 1, createdAt: -1 });

@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { Ban, CalendarDays, IndianRupee, Mail, MapPin, MessageCircle, Phone, ReceiptText, ShoppingBag, UserCheck, Users } from "lucide-react";
-import { useMemo, useState } from "react";
-import type { AdminOrder } from "@/types/admin";
+import { useState } from "react";
+import type { AdminOrder, CustomerWithStats } from "@/types/admin";
 import { getAudience } from "@/data/audiences";
-import { customersWithStats } from "@/lib/admin/metrics";
+import { useAdminQuery } from "@/hooks/use-admin-query";
+import { adminApi, errorMessage } from "@/lib/admin-api";
 import { formatDate, formatPrice } from "@/lib/utils";
-import { useAdminStore } from "@/store/admin-store";
+import { useAdminSession } from "@/store/admin-store";
 import { toast } from "@/store/ui-store";
 import { Badge, OrderStatusBadge } from "../ui/Badge";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -15,17 +16,48 @@ import { DataTable, TableEmpty, type Column } from "../ui/DataTable";
 import { TextAreaField } from "../ui/FormControls";
 import { PageHeader } from "../ui/PageHeader";
 import { Panel, StatCard } from "../ui/Panel";
+import { LoadError } from "../ui/QueryState";
 import { Avatar, VIP_SPEND } from "./CustomersView";
 
-export function CustomerDetailView({ id }: { id: string }) {
-  const customers = useAdminStore((s) => s.customers);
-  const orders = useAdminStore((s) => s.orders);
-  const updateCustomer = useAdminStore((s) => s.updateCustomer);
-  const customer = useMemo(() => customersWithStats(customers, orders).find((c) => c.id === id), [customers, orders, id]);
-  const history = useMemo(() => orders.filter((o) => o.customerId === id), [orders, id]);
-  const [notes, setNotes] = useState(customer?.notes ?? "");
-  const [confirmBlock, setConfirmBlock] = useState(false);
+interface CustomerDetail {
+  customer: CustomerWithStats;
+  orders: AdminOrder[];
+  orderTotal: number;
+}
 
+export function CustomerDetailView({ id }: { id: string }) {
+  const valid = /^[a-f\d]{24}$/i.test(id);
+  const { data, status, error, reload, replace } = useAdminQuery<CustomerDetail>(valid ? `/customers/${id}` : null);
+  const canWrite = useAdminSession((s) => s.can("customers:write"));
+  const customer = data?.customer;
+  const history = data?.orders ?? [];
+  const [notes, setNotes] = useState<string | null>(null);
+  const [confirmBlock, setConfirmBlock] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const save = async (patch: { status?: "active" | "blocked"; notes?: string }, message: string) => {
+    setSaving(true);
+    try {
+      replace((await adminApi<CustomerDetail>(`/customers/${id}`, { method: "PATCH", body: patch })).data);
+      setNotes(null);
+      toast.success(message);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (valid && status === "loading") {
+    return <div className="skeleton h-96 rounded-2xl" role="status" aria-label="Loading" />;
+  }
+  if (valid && status === "error" && !customer) {
+    return (
+      <div className="card">
+        <LoadError title="Couldn't load this customer" message={error} onRetry={reload} />
+      </div>
+    );
+  }
   if (!customer) {
     return (
       <div className="card py-16">
@@ -43,7 +75,8 @@ export function CustomerDetailView({ id }: { id: string }) {
   }
 
   const blocked = customer.status === "blocked";
-  const aov = customer.orderCount ? customer.totalSpent / Math.max(1, history.filter((o) => o.status !== "Cancelled").length) : 0;
+  const aov = customer.orderCount ? customer.totalSpent / customer.orderCount : 0;
+  const noteValue = notes ?? customer.notes;
 
   const columns: Column<AdminOrder>[] = [
     {
@@ -97,7 +130,7 @@ export function CustomerDetailView({ id }: { id: string }) {
             <a href={`https://wa.me/${waNumber}`} target="_blank" rel="noreferrer" className="btn-outline btn-sm">
               <MessageCircle size={15} aria-hidden /> WhatsApp
             </a>
-            <button type="button" onClick={() => setConfirmBlock(true)} className={blocked ? "btn-dark btn-sm" : "btn-ghost btn-sm text-danger hover:bg-danger-soft"}>
+            <button type="button" onClick={() => setConfirmBlock(true)} disabled={!canWrite || saving} className={blocked ? "btn-dark btn-sm" : "btn-ghost btn-sm text-danger hover:bg-danger-soft"}>
               {blocked ? <UserCheck size={15} aria-hidden /> : <Ban size={15} aria-hidden />}
               {blocked ? "Unblock" : "Block"}
             </button>
@@ -106,14 +139,14 @@ export function CustomerDetailView({ id }: { id: string }) {
       </section>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard label="Orders" value={customer.orderCount} icon={<ShoppingBag size={18} />} />
-        <StatCard label="Total spent" value={formatPrice(customer.totalSpent)} icon={<IndianRupee size={18} />} tone="gold" hint="excl. cancelled" />
+        <StatCard label="Orders" value={customer.orderCount} icon={<ShoppingBag size={18} />} hint="paid" />
+        <StatCard label="Total spent" value={formatPrice(customer.totalSpent)} icon={<IndianRupee size={18} />} tone="gold" hint="net of refunds" />
         <StatCard label="Average order" value={formatPrice(aov)} icon={<ReceiptText size={18} />} tone="royal" />
         <StatCard label="Last order" value={customer.lastOrderAt ? formatDate(customer.lastOrderAt).replace(/ \d{4}$/, "") : "—"} icon={<CalendarDays size={18} />} tone="success" />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
-        <Panel title="Order history" className="self-start xl:col-span-2" flush>
+        <Panel title={`Order history${data && data.orderTotal > history.length ? ` (latest ${history.length} of ${data.orderTotal})` : ""}`} className="self-start xl:col-span-2" flush>
           <DataTable
             caption={`Orders by ${customer.fullName}`}
             rows={history}
@@ -164,15 +197,20 @@ export function CustomerDetailView({ id }: { id: string }) {
           </Panel>
 
           <Panel title="Internal notes">
-            <TextAreaField label="Notes about this customer" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} hint="Only staff can see this." />
+            <TextAreaField
+              label="Notes about this customer"
+              rows={3}
+              maxLength={2000}
+              value={noteValue}
+              onChange={(e) => setNotes(e.target.value)}
+              hint="Only staff can see this."
+              disabled={!canWrite}
+            />
             <button
               type="button"
               className="btn-dark btn-sm mt-3 w-full"
-              disabled={notes === customer.notes}
-              onClick={() => {
-                updateCustomer(customer.id, { notes });
-                toast.success("Notes saved");
-              }}
+              disabled={!canWrite || saving || noteValue === customer.notes}
+              onClick={() => void save({ notes: noteValue }, "Notes saved")}
             >
               Save notes
             </button>
@@ -187,14 +225,11 @@ export function CustomerDetailView({ id }: { id: string }) {
         description={
           blocked
             ? "They will be able to sign in and place orders again."
-            : "They won't be able to sign in or place new orders. Existing orders are not affected."
+            : "They'll be signed out everywhere and won't be able to sign in to their account. Existing orders are not affected."
         }
         confirmLabel={blocked ? "Unblock" : "Block customer"}
         destructive={!blocked}
-        onConfirm={() => {
-          updateCustomer(customer.id, { status: blocked ? "active" : "blocked" });
-          toast.success(blocked ? "Customer unblocked" : "Customer blocked");
-        }}
+        onConfirm={() => void save({ status: blocked ? "active" : "blocked" }, blocked ? "Customer unblocked" : "Customer blocked")}
       />
     </>
   );

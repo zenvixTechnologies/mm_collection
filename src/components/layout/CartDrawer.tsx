@@ -17,10 +17,10 @@ export function CartDrawer() {
   const open = useUIStore((s) => s.cartOpen);
   const setOpen = useUIStore((s) => s.setCartOpen);
   const items = useCartStore((s) => s.items);
-  const couponCode = useCartStore((s) => s.couponCode);
   const loading = useCartStore((s) => s.status === "idle" || s.status === "loading");
   const pathname = usePathname();
-  const totals = calculateTotals(items, couponCode);
+  // Item count and subtotal only (from the server's bag prices); coupons are priced in the bag.
+  const totals = calculateTotals(items, null);
   const close = () => setOpen(false);
 
   useEffect(() => setOpen(false), [pathname, setOpen]);

@@ -3,22 +3,15 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { CreditCard, Info, Landmark, Loader2, Lock, ShoppingBag, Smartphone } from "lucide-react";
+import { AlertCircle, CreditCard, Info, Landmark, Loader2, Lock, RotateCw, ShoppingBag, Smartphone } from "lucide-react";
 import { useRef, useState } from "react";
-import {
-  STORE_COUNTRY,
-  type Address,
-  type CartItem,
-  type CartTotals,
-  type Order,
-  type OrderItem,
-  type PaymentMethod,
-  type PaymentRecord,
-} from "@/types";
+import { STORE_COUNTRY, type Address, type CheckoutSource, type PaymentMethod, type SavedAddress } from "@/types";
+import { useCheckoutQuote } from "@/hooks/use-checkout-quote";
+import { useRazorpayPayment } from "@/hooks/use-razorpay-payment";
 import { useHydrated } from "@/hooks/use-hydrated";
-import { calculateTotals } from "@/lib/pricing";
-import { DOMESTIC_ONLY_CONFIG, loadRazorpay, openRazorpay, type RazorpaySuccess } from "@/lib/razorpay/checkout";
-import { SITE, cn, formatPrice } from "@/lib/utils";
+import { ApiError, errorMessage } from "@/lib/api-client";
+import { newIdempotencyKey, placeOrder as submitOrder } from "@/lib/checkout-api";
+import { cn, formatPrice } from "@/lib/utils";
 import {
   INDIAN_STATES,
   normalizeMobile,
@@ -60,79 +53,86 @@ const PAYMENT_OPTIONS: { id: OnlineMethod; label: string; desc: string; icon: ty
   { id: "netbanking", label: "Net Banking", desc: "All major Indian banks", icon: Landmark },
 ];
 
-interface CreateOrderResponse {
-  orderId: string;
-  razorpayOrderId: string;
-  amount: number;
-  currency: "INR";
-  keyId: string;
-  mode: "test" | "live";
-  totals: CartTotals;
-}
-
-interface VerifyResponse {
-  orderId: string;
-  paymentMethod: PaymentMethod;
-  payment: PaymentRecord;
-  items: OrderItem[];
-  totals: CartTotals;
-  couponCode: string | null;
-}
-
-async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error || "Something went wrong. Please try again.");
-  return data;
-}
+const ADDRESS_FIELDS: (keyof Address)[] = ["house", "street", "city", "district", "state", "pincode"];
+/** Server problems that mean "look at your order again" — the quote is refreshed to show them. */
+const REVIEW_CODES = new Set(["PRICE_CHANGED", "CART_CHANGED", "COUPON_INVALID"]);
 
 export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
   const hydrated = useHydrated();
   const router = useRouter();
   const cartItems = useCartStore((s) => s.items);
+  const cartStatus = useCartStore((s) => s.status);
   const couponCode = useCartStore((s) => s.couponCode);
-  const clearCart = useCartStore((s) => s.clear);
+  const orderPlaced = useCartStore((s) => s.orderPlaced);
   const buyNowItem = useCheckoutStore((s) => s.buyNowItem);
   const clearBuyNow = useCheckoutStore((s) => s.clearBuyNow);
-  const addOrder = useOrderStore((s) => s.addOrder);
+  const rememberGuestOrder = useOrderStore((s) => s.rememberGuestOrder);
   const user = useCurrentUser();
   const addAddress = useAuthStore((s) => s.addAddress);
 
   const isBuyNow = mode === "buy-now" && !!buyNowItem;
-  const lines: CartItem[] = isBuyNow && buyNowItem ? [buyNowItem] : cartItems;
-  // Shipping charges apply but aren't calculated yet — the total excludes shipping.
-  const totals = calculateTotals(lines, couponCode);
+  const cartLoading = !isBuyNow && (cartStatus === "idle" || cartStatus === "loading");
+  // What is being bought: the server-side bag, or the single Buy Now line (the bag is left alone).
+  const source: CheckoutSource | null =
+    isBuyNow && buyNowItem
+      ? { type: "buy-now", item: { productId: buyNowItem.productId, size: buyNowItem.size, color: buyNowItem.color, quantity: buyNowItem.quantity } }
+      : cartStatus === "ready" && cartItems.length
+        ? { type: "cart" }
+        : null;
+  const bagKey = isBuyNow ? "" : cartItems.map((i) => `${i.key}:${i.quantity}:${i.price}`).join(",");
+  // Every line, price and total below comes from the server's quote (exact variant prices, live
+  // stock, server-checked coupon). Shipping charges apply but aren't calculated.
+  const { quote, status: quoteStatus, error: quoteError, refreshing, refresh } = useCheckoutQuote(hydrated ? source : null, couponCode, bagKey);
+  const lines = quote?.items ?? [];
+  const totals = quote?.totals;
+  const hasLines = isBuyNow || cartItems.length > 0;
 
   const [form, setForm] = useState<CheckoutForm>(EMPTY);
   const [prefilledFor, setPrefilledFor] = useState<string | null>(null);
+  /** Set while the address fields hold one of the customer's saved addresses, unedited. */
+  const [savedAddressId, setSavedAddressId] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors<CheckoutForm>>({});
   const [payment, setPayment] = useState<OnlineMethod>("upi");
   const [placing, setPlacing] = useState(false);
   const [saveAddress, setSaveAddress] = useState(true);
   const formRef = useRef<HTMLFormElement>(null);
+  // One key per checkout attempt: resubmitting (double click, retry after a dropped connection)
+  // returns the order already created instead of placing a second one.
+  const attemptKey = useRef<string | null>(null);
+  const { pay } = useRazorpayPayment();
 
-  // Prefill once from the signed-in (mock) account.
+  // Prefill once from the signed-in account.
   if (hydrated && user && prefilledFor !== user.id) {
     setPrefilledFor(user.id);
+    const first = user.addresses[0];
+    if (first && !form.house) setSavedAddressId(first.id);
     setForm((f) => ({
       ...f,
       fullName: f.fullName || user.fullName,
       email: f.email || user.email,
       mobile: f.mobile || user.mobile,
-      ...(user.addresses[0] && !f.house ? addressFields(user.addresses[0]) : {}),
+      ...(first && !f.house ? addressFields(first) : {}),
     }));
   }
 
   const set = (key: keyof CheckoutForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const value = key === "pincode" ? e.target.value.replace(/\D/g, "").slice(0, 6) : e.target.value;
     setForm((f) => ({ ...f, [key]: value }));
+    if ((ADDRESS_FIELDS as string[]).includes(key)) setSavedAddressId(null);
     if (errors[key]) setErrors((er) => ({ ...er, [key]: undefined }));
   };
 
-  const applySaved = (a: Address) => {
+  const applySaved = (a: SavedAddress) => {
     setForm((f) => ({ ...f, ...addressFields(a) }));
+    setSavedAddressId(a.id);
     setErrors({});
   };
+
+  // Move focus to the first invalid field.
+  const focusFirstError = () =>
+    window.setTimeout(() => {
+      formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    }, 0);
 
   const placeOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,10 +141,16 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
     setErrors(errs);
     if (Object.keys(errs).length) {
       toast.error("Please fix the highlighted fields");
-      // Move focus to the first invalid field.
-      window.setTimeout(() => {
-        formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
-      }, 0);
+      focusFirstError();
+      return;
+    }
+    if (!source || !quote || refreshing) {
+      toast.info("Just a moment — we're updating your order total.");
+      return;
+    }
+    if (!quote.canPlaceOrder) {
+      const why = quote.coupon?.status === "rejected" ? quote.coupon.message : quote.issues.find((i) => i.blocking)?.message;
+      toast.error(why ?? "Please review your order before placing it.");
       return;
     }
 
@@ -158,84 +164,59 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
       pincode: form.pincode.trim(),
     };
     const customer = { fullName: form.fullName.trim(), mobile: normalizeMobile(form.mobile), email: form.email.trim() };
-    // Only item IDs, variants and quantities are sent — the server prices the order itself.
-    const items = lines.map((l) => ({ productId: l.productId, size: l.size, color: l.color, quantity: l.quantity }));
-    const appliedCoupon = totals.couponDiscount > 0 ? couponCode : null;
-    const fail = (message: string) => {
-      setPlacing(false);
-      toast.error(message);
-    };
+    const savedId = user ? savedAddressId : null;
+    attemptKey.current ??= newIdempotencyKey();
 
-    let created: CreateOrderResponse;
     try {
-      created = await postJson<CreateOrderResponse>("/api/payments/razorpay/order", {
-        items,
-        couponCode: appliedCoupon,
+      // Only what to buy, who for and where to — the server prices the order itself and refuses
+      // it if the total differs from the one shown here.
+      const result = await submitOrder({
+        source,
+        couponCode: quote.coupon?.status === "applied" ? quote.coupon.code : null,
         customer,
-        address: { ...address, country: STORE_COUNTRY },
+        ...(savedId ? { addressId: savedId } : { address: { ...address, country: STORE_COUNTRY } }),
+        paymentMethod: payment,
+        idempotencyKey: attemptKey.current,
+        expectedTotalPaise: quote.amounts.totalPaise,
       });
+      if (result.accessToken) rememberGuestOrder({ id: result.order.id, token: result.accessToken });
+      if (user && saveAddress && !savedId) void addAddress(address);
+      if (isBuyNow) clearBuyNow();
+      else orderPlaced(); // the server emptied the bag in the same transaction
+      attemptKey.current = null;
+      // The order exists and its items are reserved: now pay for its stored total. Whatever happens
+      // in the payment window, the order page shows the server's verdict (and lets them pay again).
+      const outcome = await pay(result.order.id, { token: result.accessToken, method: payment });
+      if (outcome === "dismissed") toast.info("Payment not completed — your items are reserved for 30 minutes. You can pay from the next page.");
+      router.replace(`/order-success?id=${result.order.id}`);
     } catch (err) {
-      return fail((err as Error).message);
-    }
-
-    if (!(await loadRazorpay())) return fail("Couldn't load the payment window. Check your connection and try again.");
-
-    const onPaid = async (res: RazorpaySuccess) => {
-      try {
-        const v = await postJson<VerifyResponse>("/api/payments/razorpay/verify", { ...res, items, couponCode: appliedCoupon });
-        const now = new Date().toISOString();
-        const order: Order = {
-          id: v.orderId,
-          createdAt: now,
-          items: v.items,
-          customer,
-          address,
-          paymentMethod: v.paymentMethod,
-          payment: v.payment,
-          couponCode: v.couponCode,
-          subtotal: v.totals.subtotal,
-          discount: v.totals.couponDiscount,
-          // Shipping charges are applicable but not calculated yet, so they are not part of the total.
-          shipping: null,
-          // The amount Razorpay actually captured, as confirmed by our server.
-          total: v.payment.amount,
-          status: "Order Placed",
-          history: { "Order Placed": now },
-        };
-        addOrder(order);
-        if (user && saveAddress) void addAddress(address);
-        if (isBuyNow) clearBuyNow();
-        else clearCart();
-        router.replace(`/order-success?id=${order.id}`);
-      } catch (err) {
-        fail((err as Error).message);
+      setPlacing(false);
+      if (err instanceof ApiError && err.code === "VALIDATION_ERROR" && err.issues?.length) {
+        const fieldErrors: FormErrors<CheckoutForm> = {};
+        for (const issue of err.issues) {
+          const key = issue.path.split(".").pop() as keyof CheckoutForm;
+          if (key in EMPTY) fieldErrors[key] ??= issue.message;
+        }
+        if (Object.keys(fieldErrors).length) {
+          setErrors(fieldErrors);
+          toast.error("Please fix the highlighted fields");
+          focusFirstError();
+          return;
+        }
       }
-    };
-
-    try {
-      openRazorpay(
-        {
-          key: created.keyId,
-          amount: created.amount,
-          currency: "INR",
-          order_id: created.razorpayOrderId,
-          name: SITE.name,
-          description: `Order ${created.orderId}`,
-          prefill: { name: customer.fullName, email: customer.email, contact: `+91${customer.mobile}`, method: payment },
-          notes: { store_order_id: created.orderId },
-          theme: { color: "#b3121b" },
-          config: DOMESTIC_ONLY_CONFIG,
-          modal: { ondismiss: () => fail("Payment cancelled. Your bag is saved — you can try again.") },
-          handler: (res) => void onPaid(res),
-        },
-        (message) => toast.error(message),
-      );
-    } catch {
-      fail("Couldn't open the payment window. Please try again.");
+      if (err instanceof ApiError && REVIEW_CODES.has(err.code)) {
+        // Nothing was ordered: show what changed (prices, stock, coupon) so they can try again.
+        toast.error(err.message);
+        refresh();
+        if (!isBuyNow) void useCartStore.getState().sync();
+        return;
+      }
+      if (err instanceof ApiError && err.status === 404 && savedId) setSavedAddressId(null);
+      toast.error(errorMessage(err));
     }
   };
 
-  if (!hydrated) {
+  if (!hydrated || (cartLoading && !placing)) {
     return (
       <Shell>
         <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_400px]">
@@ -246,7 +227,7 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
     );
   }
 
-  if (!lines.length && !placing) {
+  if (!hasLines && !placing) {
     return (
       <Shell>
         <EmptyState
@@ -276,6 +257,23 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
           <Info size={15} className="text-accent" /> Buying this item directly — items in your bag are kept for later.
         </p>
       )}
+      {quote && quote.issues.length > 0 && (
+        <div role="alert" className="mt-4 flex gap-3 rounded-xl border border-dashed border-warning bg-[#fdf6ea] px-4 py-3 text-sm">
+          <AlertCircle size={18} className="mt-0.5 shrink-0 text-warning" />
+          <div>
+            <ul className="space-y-1">
+              {quote.issues.map((i, n) => (
+                <li key={`${i.code}-${i.sku ?? n}`}>{i.message}</li>
+              ))}
+            </ul>
+            {!quote.canPlaceOrder && !isBuyNow && quote.issues.some((i) => i.blocking) && (
+              <Link href="/cart" className="mt-2 inline-block font-semibold underline underline-offset-2">
+                Review your bag
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
 
       <form ref={formRef} onSubmit={placeOrder} noValidate className="mt-6 grid gap-8 pb-28 lg:grid-cols-[1fr_400px] lg:gap-12 lg:pb-0">
         <div className="space-y-8">
@@ -303,11 +301,11 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
               <div className="mb-5">
                 <p className="mb-2 text-sm font-medium">Saved addresses</p>
                 <div className="flex flex-wrap gap-2">
-                  {user.addresses.map((a, i) => {
-                    const active = a.house === form.house && a.pincode === form.pincode;
+                  {user.addresses.map((a) => {
+                    const active = savedAddressId === a.id;
                     return (
                       <button
-                        key={i}
+                        key={a.id}
                         type="button"
                         onClick={() => applySaved(a)}
                         aria-pressed={active}
@@ -432,59 +430,80 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-          <div className="rounded-2xl border border-line p-5">
-            <h2 className="text-lg font-semibold">
-              Items <span className="font-normal text-muted">({totals.itemCount})</span>
-            </h2>
-            <ul className="mt-4 max-h-72 space-y-4 overflow-y-auto pr-1">
-              {lines.map((l) => (
-                <li key={l.key} className="flex gap-3">
-                  <div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-lg bg-sand">
-                    <ProductImage src={l.image} alt={l.name} fill sizes="64px" />
-                    <span className="absolute top-1 right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-ink px-1 text-[11px] font-bold text-white">
-                      {l.quantity}
-                    </span>
-                  </div>
-                  <div className="min-w-0 flex-1 text-sm">
-                    <p className="line-clamp-2 font-medium">{l.name}</p>
-                    <p className="mt-0.5 text-[13px] text-muted">
-                      {[l.size && `Size ${l.size}`, l.color, `Qty ${l.quantity}`].filter(Boolean).join(" · ")}
-                    </p>
-                  </div>
-                  <p className="text-sm font-semibold">{formatPrice(l.price * l.quantity)}</p>
-                </li>
-              ))}
-            </ul>
-            <div className="mt-5 border-t border-line pt-5">
-              <CouponForm subtotal={totals.subtotal} />
-            </div>
-          </div>
-          <OrderSummary totals={totals} couponCode={couponCode} title="Price details">
-            <button type="submit" disabled={placing} className="btn-accent mt-5 hidden min-h-13 w-full text-[15px] lg:flex">
-              {placing ? <Loader2 size={18} className="animate-spin" /> : <Lock size={16} />}
-              {placing ? "Processing payment…" : `Place Order · ${formatPrice(totals.total)}`}
-            </button>
-            <p className="mt-3 hidden text-center text-xs text-muted lg:block">
-              By placing your order you agree to our{" "}
-              <Link href="/terms" className="underline">
-                Terms
-              </Link>{" "}
-              and{" "}
-              <Link href="/return-policy" className="underline">
-                Return Policy
-              </Link>
-              .
-            </p>
-          </OrderSummary>
+          {!quote || !totals ? (
+            quoteStatus === "error" ? (
+              <div className="rounded-2xl border border-line p-5 text-sm">
+                <p className="font-semibold">We couldn&apos;t load your order total</p>
+                <p className="mt-1 text-muted">{quoteError ?? "Please try again."}</p>
+                <button type="button" onClick={refresh} className="btn-primary mt-4">
+                  <RotateCw size={16} /> Try again
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="rounded-2xl border border-line p-5">
+                  <LineSkeleton rows={2} />
+                </div>
+                <div className="skeleton h-72 rounded-2xl" />
+              </>
+            )
+          ) : (
+            <>
+              <div className="rounded-2xl border border-line p-5">
+                <h2 className="text-lg font-semibold">
+                  Items <span className="font-normal text-muted">({totals.itemCount})</span>
+                </h2>
+                <ul className="mt-4 max-h-72 space-y-4 overflow-y-auto pr-1">
+                  {lines.map((l) => (
+                    <li key={l.key} className="flex gap-3">
+                      <div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-lg bg-sand">
+                        <ProductImage src={l.image} alt={l.name} fill sizes="64px" />
+                        <span className="absolute top-1 right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-ink px-1 text-[11px] font-bold text-white">
+                          {l.quantity}
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1 text-sm">
+                        <p className="line-clamp-2 font-medium">{l.name}</p>
+                        <p className="mt-0.5 text-[13px] text-muted">
+                          {[l.size && `Size ${l.size}`, l.color, `Qty ${l.quantity}`].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                      <p className="text-sm font-semibold">{formatPrice(l.price * l.quantity)}</p>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-5 border-t border-line pt-5">
+                  <CouponForm subtotal={totals.subtotal} coupon={quote.coupon} source={source ?? undefined} />
+                </div>
+              </div>
+              <OrderSummary totals={totals} couponCode={quote.coupon?.status === "applied" ? quote.coupon.code : null} title="Price details">
+                <button type="submit" disabled={placing} className="btn-accent mt-5 hidden min-h-13 w-full text-[15px] lg:flex">
+                  {placing ? <Loader2 size={18} className="animate-spin" /> : <Lock size={16} />}
+                  {placing ? "Processing payment…" : `Place Order · ${formatPrice(totals.total)}`}
+                </button>
+                <p className="mt-3 hidden text-center text-xs text-muted lg:block">
+                  By placing your order you agree to our{" "}
+                  <Link href="/terms" className="underline">
+                    Terms
+                  </Link>{" "}
+                  and{" "}
+                  <Link href="/return-policy" className="underline">
+                    Return Policy
+                  </Link>
+                  .
+                </p>
+              </OrderSummary>
+            </>
+          )}
         </aside>
 
         {/* Mobile sticky place order */}
         <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-4 border-t border-line bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
           <div>
             <p className="text-xs text-muted">Total · Shipping charges applicable</p>
-            <p className="text-lg font-semibold">{formatPrice(totals.total)}</p>
+            <p className="text-lg font-semibold">{totals ? formatPrice(totals.total) : "—"}</p>
           </div>
-          <button type="submit" disabled={placing} className="btn-accent min-h-12 flex-1">
+          <button type="submit" disabled={placing || !totals} className="btn-accent min-h-12 flex-1">
             {placing ? <Loader2 size={18} className="animate-spin" /> : <Lock size={15} />}
             {placing ? "Processing…" : "Place Order"}
           </button>

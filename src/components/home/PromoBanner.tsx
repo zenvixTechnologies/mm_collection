@@ -6,9 +6,11 @@ import { useState } from "react";
 import { IMG, wide } from "@/data/images";
 import { toast } from "@/store/ui-store";
 import { ProductImage } from "@/components/ui/ProductImage";
+import type { StorefrontBanner } from "@/types";
 import { Reveal } from "@/components/ui/Reveal";
 
-export function PromoBanner() {
+/** Promotional strip. An active promo banner from the admin replaces the built-in festive offer. */
+export function PromoBanner({ banner = null }: { banner?: StorefrontBanner | null }) {
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
@@ -26,21 +28,24 @@ export function PromoBanner() {
     <Reveal>
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-accent-dark via-accent to-[#7a0b11] text-white">
         <div className="absolute inset-y-0 right-0 hidden w-1/2 md:block">
-          <ProductImage src={wide(IMG.printRack, "4:3")} alt="" fill sizes="50vw" className="opacity-90" />
+          <ProductImage src={banner?.image ?? wide(IMG.printRack, "4:3")} alt="" fill sizes="50vw" className="opacity-90" />
           <div className="absolute inset-0 bg-gradient-to-r from-accent-dark via-accent-dark/40 to-transparent" />
         </div>
         <div className="relative px-6 py-12 sm:px-12 md:w-3/5 md:py-16">
-          <p className="text-xs font-semibold tracking-[0.2em] text-gold-light uppercase">◆ Festive Season Sale</p>
+          {(banner ? banner.eyebrow : true) && (
+            <p className="text-xs font-semibold tracking-[0.2em] text-gold-light uppercase">◆ {banner ? banner.eyebrow : "Festive Season Sale"}</p>
+          )}
           <h2 className="mt-3 font-display text-4xl leading-tight font-semibold text-white sm:text-5xl">
-            Extra 20% off on orders above ₹2,999
+            {banner ? banner.title : "Extra 20% off on orders above ₹2,999"}
           </h2>
           <p className="mt-3 max-w-md text-white/85">
-            Stock up on sarees, kurtis and party wear. Valid on all styles, including sale — limited period only.
+            {banner ? banner.subtitle : "Stock up on sarees, kurtis and party wear. Valid on all styles, including sale — limited period only."}
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
-            <Link href="/shop" className="btn-light min-h-12 px-7">
-              Shop the Sale
+            <Link href={banner?.ctaHref ?? "/shop"} className="btn-light min-h-12 px-7">
+              {banner?.ctaLabel ?? "Shop the Sale"}
             </Link>
+            {!banner && (
             <button
               type="button"
               onClick={copy}
@@ -49,6 +54,7 @@ export function PromoBanner() {
             >
               {copied ? <Check size={16} /> : <Copy size={16} />} FESTIVE20
             </button>
+            )}
           </div>
         </div>
       </div>

@@ -2,58 +2,110 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ChevronRight, Download, ShoppingBag } from "lucide-react";
-import { useMemo, useState } from "react";
-import type { AdminOrder, AdminOrderStatus } from "@/types/admin";
-import { MOCK_NOW } from "@/data/admin/mock-utils";
+import { ChevronRight, Download, Loader2, ShoppingBag } from "lucide-react";
+import { useState } from "react";
+import type { AdminOrder, AdminOrderStatus, AdminPage } from "@/types/admin";
+import { useAdminQuery, withQuery } from "@/hooks/use-admin-query";
+import { useDebounced } from "@/hooks/use-debounced";
+import { adminApi, errorMessage } from "@/lib/admin-api";
 import { formatDate, formatPrice } from "@/lib/utils";
-import { useAdminStore } from "@/store/admin-store";
+import { useAdminSession } from "@/store/admin-store";
 import { toast } from "@/store/ui-store";
 import { OrderStatusBadge, PaymentStatusBadge } from "../ui/Badge";
 import { downloadCsv } from "../ui/csv";
-import { DataTable, TableEmpty, type Column } from "../ui/DataTable";
+import { DataTable, TableEmpty, type Column, type SortState } from "../ui/DataTable";
 import { PageHeader } from "../ui/PageHeader";
+import { LoadError, TableSkeleton } from "../ui/QueryState";
 import { FilterSelect, SearchInput, Tabs, Toolbar } from "../ui/Toolbar";
-import { ADMIN_ORDER_STATUSES, PAYMENT_METHOD_LABEL, nextStatuses } from "./sales-helpers";
+import { ADMIN_ORDER_STATUSES, PAYMENT_METHOD_LABEL } from "./sales-helpers";
 
 type StatusTab = "all" | AdminOrderStatus;
 type RangeFilter = "all" | "7" | "30" | "90";
+type OrderPage = AdminPage<AdminOrder> & { counts: Partial<Record<StatusTab, number>>; revenue: number };
+
+const PAGE_SIZE = 20;
+const BULK_STATUSES = ["Confirmed", "Processing", "Shipped", "Out for Delivery", "Delivered"] as const;
+
+const daysAgo = (days: string) => (days === "all" ? "" : new Date(Date.now() - Number(days) * 86_400_000).toISOString().slice(0, 10));
 
 export function OrdersView() {
   const params = useSearchParams();
-  const orders = useAdminStore((s) => s.orders);
-  const updateOrderStatus = useAdminStore((s) => s.updateOrderStatus);
+  const canWrite = useAdminSession((s) => s.can("orders:write"));
   const initialTab = params.get("status");
   const [tab, setTab] = useState<StatusTab>(ADMIN_ORDER_STATUSES.includes(initialTab as AdminOrderStatus) ? (initialTab as AdminOrderStatus) : "all");
   const [q, setQ] = useState(params.get("q") ?? "");
   const [method, setMethod] = useState<"all" | "upi" | "card" | "netbanking">("all");
   const [range, setRange] = useState<RangeFilter>("all");
+  const [sort, setSort] = useState<SortState>({ id: "date", dir: "desc" });
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<string[]>([]);
-  const [bulkStatus, setBulkStatus] = useState<AdminOrderStatus>("Confirmed");
+  const [bulkStatus, setBulkStatus] = useState<(typeof BULK_STATUSES)[number]>("Confirmed");
+  const [busy, setBusy] = useState<"bulk" | "export" | null>(null);
 
-  const filtered = useMemo(() => {
-    const term = q.trim().toLowerCase();
-    const from = range === "all" ? 0 : MOCK_NOW.getTime() - Number(range) * 86_400_000;
-    return orders.filter(
-      (o) =>
-        (tab === "all" || o.status === tab) &&
-        (method === "all" || o.paymentMethod === method) &&
-        new Date(o.createdAt).getTime() > from &&
-        (!term ||
-          o.id.toLowerCase().includes(term) ||
-          o.customer.fullName.toLowerCase().includes(term) ||
-          o.customer.email.toLowerCase().includes(term) ||
-          o.customer.mobile.includes(term)),
-    );
-  }, [orders, tab, method, range, q]);
+  const term = useDebounced(q.trim());
+  const filters = {
+    q: term,
+    status: tab === "all" ? undefined : tab,
+    method: method === "all" ? undefined : method,
+    from: daysAgo(range),
+    sort: sort.id === "total" ? "total" : "created",
+    dir: sort.dir,
+  };
+  const filterKey = JSON.stringify(filters);
+  const [lastKey, setLastKey] = useState(filterKey);
+  if (filterKey !== lastKey) {
+    setLastKey(filterKey);
+    setPage(1);
+    setSelected([]);
+  }
+  const { data, status, error, refreshing, reload } = useAdminQuery<OrderPage>(withQuery("/orders", { ...filters, page, limit: PAGE_SIZE }));
+  const rows = data?.items ?? [];
+  const count = (s: StatusTab) => data?.counts?.[s] ?? 0;
 
-  const count = (s: AdminOrderStatus) => orders.filter((o) => o.status === s).length;
+  const exportCsv = async () => {
+    setBusy("export");
+    try {
+      const all: AdminOrder[] = [];
+      for (let p = 1; p <= 100; p++) {
+        const res = await adminApi<OrderPage>(withQuery("/orders", { ...filters, page: p, limit: 100 }));
+        all.push(...res.data.items);
+        if (p >= res.data.totalPages) break;
+      }
+      downloadCsv(
+        "mm-orders.csv",
+        ["Order", "Placed", "Customer", "Mobile", "City", "Items", "Total", "Payment", "Status"],
+        all.map((o) => [o.id, o.createdAt, o.customer.fullName, o.customer.mobile, o.address.city, o.items.length, o.total, o.paymentStatus, o.status]),
+      );
+      toast.success(`Exported ${all.length} orders`);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const applyBulk = async (ids: string[]) => {
+    setBusy("bulk");
+    try {
+      const { data: r } = await adminApi<{ updated: string[]; skipped: { id: string; reason: string }[] }>("/orders/bulk-status", {
+        method: "POST",
+        body: { ids, status: bulkStatus },
+      });
+      if (r.updated.length) toast.success(`${r.updated.length} order${r.updated.length > 1 ? "s" : ""} moved to ${bulkStatus}`);
+      if (r.skipped.length) toast.info(`${r.skipped.length} skipped — ${r.skipped[0].reason}`);
+      setSelected([]);
+      reload();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const columns: Column<AdminOrder>[] = [
     {
       id: "id",
       header: "Order",
-      sortValue: (o) => o.id,
       cell: (o) => (
         <div className="whitespace-nowrap">
           <Link href={`/mm-hub/orders/${o.id}`} className="font-semibold hover:text-accent hover:underline">
@@ -75,12 +127,17 @@ export function OrdersView() {
     {
       id: "customer",
       header: "Customer",
-      sortValue: (o) => o.customer.fullName,
       cell: (o) => (
         <div className="min-w-[140px]">
-          <Link href={`/mm-hub/customers/${o.customerId}`} className="font-medium hover:underline">
-            {o.customer.fullName}
-          </Link>
+          {o.customerId ? (
+            <Link href={`/mm-hub/customers/${o.customerId}`} className="font-medium hover:underline">
+              {o.customer.fullName}
+            </Link>
+          ) : (
+            <span className="font-medium">
+              {o.customer.fullName} <span className="text-xs font-normal text-muted">(guest)</span>
+            </span>
+          )}
           <p className="text-xs text-muted">
             {o.address.city}, {o.address.state}
           </p>
@@ -91,7 +148,6 @@ export function OrdersView() {
       id: "payment",
       header: "Payment",
       hideBelow: "lg",
-      sortValue: (o) => o.paymentStatus,
       cell: (o) => (
         <div className="flex flex-col items-start gap-1">
           <PaymentStatusBadge status={o.paymentStatus} />
@@ -99,7 +155,7 @@ export function OrdersView() {
         </div>
       ),
     },
-    { id: "status", header: "Status", sortValue: (o) => ADMIN_ORDER_STATUSES.indexOf(o.status), cell: (o) => <OrderStatusBadge status={o.status} /> },
+    { id: "status", header: "Status", cell: (o) => <OrderStatusBadge status={o.status} /> },
     {
       id: "total",
       header: "Total",
@@ -127,19 +183,8 @@ export function OrdersView() {
         title="Orders"
         description="Confirm, pack and ship orders, and keep customers updated with tracking."
         actions={
-          <button
-            type="button"
-            className="btn-outline btn-sm"
-            onClick={() => {
-              downloadCsv(
-                "mm-orders.csv",
-                ["Order", "Placed", "Customer", "Mobile", "City", "Items", "Total", "Payment", "Status"],
-                filtered.map((o) => [o.id, o.createdAt, o.customer.fullName, o.customer.mobile, o.address.city, o.items.length, o.total, o.paymentStatus, o.status]),
-              );
-              toast.success(`Exported ${filtered.length} orders`);
-            }}
-          >
-            <Download size={15} aria-hidden /> Export CSV
+          <button type="button" className="btn-outline btn-sm" disabled={busy === "export" || !data?.total} onClick={() => void exportCsv()}>
+            {busy === "export" ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <Download size={15} aria-hidden />} Export CSV
           </button>
         }
       />
@@ -149,11 +194,8 @@ export function OrdersView() {
           <Tabs<StatusTab>
             label="Order status"
             value={tab}
-            onChange={(t) => {
-              setTab(t);
-              setSelected([]);
-            }}
-            items={[{ value: "all", label: "All", count: orders.length }, ...ADMIN_ORDER_STATUSES.map((s) => ({ value: s, label: s, count: count(s) }))]}
+            onChange={setTab}
+            items={[{ value: "all", label: "All", count: count("all") }, ...ADMIN_ORDER_STATUSES.map((s) => ({ value: s, label: s, count: count(s) }))]}
           />
         </div>
         <Toolbar className="p-4">
@@ -183,50 +225,48 @@ export function OrdersView() {
             />
           </div>
           <p className="text-[13px] text-muted sm:ml-auto">
-            {filtered.length} order{filtered.length === 1 ? "" : "s"} · {formatPrice(filtered.filter((o) => o.status !== "Cancelled").reduce((s, o) => s + o.total, 0))}
+            {data?.total ?? 0} order{data?.total === 1 ? "" : "s"} · {formatPrice(data?.revenue ?? 0)} paid
           </p>
         </Toolbar>
-        <DataTable
-          caption="Orders"
-          rows={filtered}
-          columns={columns}
-          getRowId={(o) => o.id}
-          resetKey={`${tab}|${q}|${method}|${range}`}
-          initialSort={{ id: "date", dir: "desc" }}
-          selectable
-          selected={selected}
-          onSelectedChange={setSelected}
-          bulkActions={(ids) => (
-            <>
-              <label htmlFor="bulk-status" className="text-[13px] text-muted">
-                Move to
-              </label>
-              <select id="bulk-status" value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value as AdminOrderStatus)} className="field-input field-sm h-8 w-auto bg-white">
-                {(["Confirmed", "Processing", "Shipped", "Out for Delivery", "Delivered"] as const).map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="btn-primary btn-sm min-h-8"
-                onClick={() => {
-                  const movable = ids.filter((id) => {
-                    const o = orders.find((x) => x.id === id);
-                    return o && nextStatuses(o.status).includes(bulkStatus);
-                  });
-                  movable.forEach((id) => updateOrderStatus(id, bulkStatus));
-                  const skipped = ids.length - movable.length;
-                  if (movable.length) toast.success(`${movable.length} order${movable.length > 1 ? "s" : ""} moved to ${bulkStatus}`);
-                  if (skipped) toast.info(`${skipped} skipped — they're already at or past that status`);
-                  setSelected([]);
-                }}
-              >
-                Apply
-              </button>
-            </>
-          )}
-          empty={<TableEmpty icon={<ShoppingBag size={24} />} title="No orders found" description="Try another status, date range or search." />}
-        />
+        {status === "loading" ? (
+          <TableSkeleton />
+        ) : status === "error" ? (
+          <LoadError title="Couldn't load orders" message={error} onRetry={reload} />
+        ) : (
+          <DataTable
+            caption="Orders"
+            rows={rows}
+            columns={columns}
+            getRowId={(o) => o.id}
+            sort={sort}
+            onSortChange={setSort}
+            server={{ page, totalPages: data?.totalPages ?? 1, total: data?.total ?? 0, limit: PAGE_SIZE, onPageChange: setPage, loading: refreshing }}
+            selectable={canWrite}
+            selected={selected}
+            onSelectedChange={setSelected}
+            bulkActions={(ids) => (
+              <>
+                <label htmlFor="bulk-status" className="text-[13px] text-muted">
+                  Move to
+                </label>
+                <select
+                  id="bulk-status"
+                  value={bulkStatus}
+                  onChange={(e) => setBulkStatus(e.target.value as (typeof BULK_STATUSES)[number])}
+                  className="field-input field-sm h-8 w-auto bg-white"
+                >
+                  {BULK_STATUSES.map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </select>
+                <button type="button" className="btn-primary btn-sm min-h-8" disabled={busy === "bulk"} onClick={() => void applyBulk(ids)}>
+                  {busy === "bulk" && <Loader2 size={14} className="animate-spin" aria-hidden />} Apply
+                </button>
+              </>
+            )}
+            empty={<TableEmpty icon={<ShoppingBag size={24} />} title="No orders found" description="Try another status, date range or search." />}
+          />
+        )}
       </div>
     </>
   );

@@ -38,6 +38,14 @@ interface DataTableProps<T> {
   rowClassName?: (row: T) => string | undefined;
   /** Change this (e.g. to the current search + filters) to jump back to page 1. */
   resetKey?: string;
+  /**
+   * Server-side pagination: `rows` is already one page. The table shows the server's page numbers
+   * and asks for another page via `onPageChange` (1-based) instead of slicing locally.
+   */
+  server?: { page: number; totalPages: number; total: number; limit: number; onPageChange: (page: number) => void; loading?: boolean };
+  /** Controlled sort (server-side sorting): header clicks call this instead of sorting locally. */
+  sort?: SortState;
+  onSortChange?: (sort: SortState) => void;
 }
 
 const HIDE: Record<NonNullable<Column<unknown>["hideBelow"]>, string> = {
@@ -63,8 +71,12 @@ export function DataTable<T>({
   empty,
   rowClassName,
   resetKey,
+  server,
+  sort: controlledSort,
+  onSortChange,
 }: DataTableProps<T>) {
-  const [sort, setSort] = useState<SortState | undefined>(initialSort);
+  const [localSort, setLocalSort] = useState<SortState | undefined>(initialSort);
+  const sort = onSortChange ? controlledSort : localSort;
   const [page, setPage] = useState(0);
   const [lastResetKey, setLastResetKey] = useState(resetKey);
   if (resetKey !== lastResetKey) {
@@ -74,7 +86,7 @@ export function DataTable<T>({
 
   const sorted = useMemo(() => {
     const col = sort && columns.find((c) => c.id === sort.id);
-    if (!sort || !col?.sortValue) return rows;
+    if (onSortChange || !sort || !col?.sortValue) return rows;
     const get = col.sortValue;
     const dir = sort.dir === "asc" ? 1 : -1;
     return [...rows].sort((a, b) => {
@@ -83,17 +95,23 @@ export function DataTable<T>({
       if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
       return String(va).localeCompare(String(vb), "en-IN", { numeric: true }) * dir;
     });
-  }, [rows, columns, sort]);
+  }, [rows, columns, sort, onSortChange]);
 
-  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const current = Math.min(page, pageCount - 1);
-  const visible = sorted.slice(current * pageSize, current * pageSize + pageSize);
+  const total = server ? server.total : sorted.length;
+  const size = server ? server.limit : pageSize;
+  const pageCount = server ? Math.max(1, server.totalPages) : Math.max(1, Math.ceil(sorted.length / pageSize));
+  const current = server ? Math.min(server.page - 1, pageCount - 1) : Math.min(page, pageCount - 1);
+  const visible = server ? sorted : sorted.slice(current * pageSize, current * pageSize + pageSize);
+  const goTo = (p: number) => (server ? server.onPageChange(p + 1) : setPage(p));
   const visibleIds = visible.map(getRowId);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.includes(id));
   const someVisibleSelected = visibleIds.some((id) => selected.includes(id));
 
-  const toggleSort = (id: string) =>
-    setSort((s) => (s?.id === id ? { id, dir: s.dir === "asc" ? "desc" : "asc" } : { id, dir: "desc" }));
+  const toggleSort = (id: string) => {
+    const next: SortState = sort?.id === id ? { id, dir: sort.dir === "asc" ? "desc" : "asc" } : { id, dir: "desc" };
+    if (onSortChange) onSortChange(next);
+    else setLocalSort(next);
+  };
 
   const toggleRow = (id: string) =>
     onSelectedChange?.(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
@@ -117,7 +135,7 @@ export function DataTable<T>({
         </div>
       )}
 
-      <div className="relative overflow-x-auto">
+      <div className={cn("relative overflow-x-auto", server?.loading && "opacity-60 transition-opacity")} aria-busy={server?.loading || undefined}>
         <table className="w-full min-w-full border-collapse text-sm">
           <caption className="sr-only">{caption}</caption>
           <thead>
@@ -194,18 +212,18 @@ export function DataTable<T>({
         {rows.length === 0 && <div className="px-4 py-14 text-center">{empty ?? <p className="text-sm text-muted">Nothing to show.</p>}</div>}
       </div>
 
-      {sorted.length > pageSize && (
+      {total > size && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3 text-[13px] text-muted">
           <p>
-            Showing <span className="font-semibold text-ink tabular-nums">{current * pageSize + 1}</span>–
-            <span className="font-semibold text-ink tabular-nums">{Math.min(sorted.length, (current + 1) * pageSize)}</span> of{" "}
-            <span className="font-semibold text-ink tabular-nums">{sorted.length}</span>
+            Showing <span className="font-semibold text-ink tabular-nums">{current * size + 1}</span>–
+            <span className="font-semibold text-ink tabular-nums">{Math.min(total, current * size + visible.length)}</span> of{" "}
+            <span className="font-semibold text-ink tabular-nums">{total}</span>
           </p>
           <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={() => setPage(current - 1)}
-              disabled={current === 0}
+              onClick={() => goTo(current - 1)}
+              disabled={current === 0 || server?.loading}
               className="flex h-9 w-9 items-center justify-center rounded-full border border-line bg-white text-ink transition-colors hover:bg-sand disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Previous page"
             >
@@ -216,8 +234,8 @@ export function DataTable<T>({
             </span>
             <button
               type="button"
-              onClick={() => setPage(current + 1)}
-              disabled={current >= pageCount - 1}
+              onClick={() => goTo(current + 1)}
+              disabled={current >= pageCount - 1 || server?.loading}
               className="flex h-9 w-9 items-center justify-center rounded-full border border-line bg-white text-ink transition-colors hover:bg-sand disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Next page"
             >

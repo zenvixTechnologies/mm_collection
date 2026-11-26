@@ -41,11 +41,22 @@ const schemas = {
     CLOUDINARY_API_KEY: str,
     CLOUDINARY_API_SECRET: str,
   }),
-  razorpay: z.object({
-    RAZORPAY_KEY_ID: str.regex(/^rzp_(test|live)_[A-Za-z0-9]+$/, "must look like rzp_test_… or rzp_live_…"),
-    RAZORPAY_KEY_SECRET: str,
-    /** Required by the webhook endpoint only. */
-    RAZORPAY_WEBHOOK_SECRET: str.optional(),
+  razorpay: z
+    .object({
+      RAZORPAY_KEY_ID: str.regex(/^rzp_(test|live)_[A-Za-z0-9]+$/, "must look like rzp_test_… or rzp_live_…"),
+      RAZORPAY_KEY_SECRET: str,
+      /** Required by the webhook endpoint only (see the `razorpayWebhook` group). */
+      RAZORPAY_WEBHOOK_SECRET: str.optional(),
+      /** Live keys are refused unless this is exactly "true" — Live Mode is never enabled by accident. */
+      RAZORPAY_ALLOW_LIVE: z.enum(["true", "false"]).optional(),
+    })
+    .refine((e) => !e.RAZORPAY_KEY_ID.startsWith("rzp_live_") || e.RAZORPAY_ALLOW_LIVE === "true", {
+      path: ["RAZORPAY_ALLOW_LIVE"],
+      message: 'must be "true" to use Live Mode keys (rzp_live_…) — use Test Mode keys until the account is approved',
+    }),
+  razorpayWebhook: z.object({
+    /** Razorpay Dashboard → Webhooks → the secret set on the webhook. */
+    RAZORPAY_WEBHOOK_SECRET: str,
   }),
   upstash: z.object({
     UPSTASH_REDIS_REST_URL: z.url("must be the https REST URL from the Upstash console"),
