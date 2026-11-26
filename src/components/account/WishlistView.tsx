@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { Heart, ShoppingBag, X } from "lucide-react";
+import { Heart, Loader2, RotateCw, ShoppingBag, X } from "lucide-react";
 import { useState } from "react";
 import type { Product } from "@/types";
 import { useCatalog } from "@/components/catalog/CatalogProvider";
@@ -22,7 +22,10 @@ import { VariantPicker } from "@/components/products/VariantPicker";
 export function WishlistView() {
   const hydrated = useHydrated();
   const ids = useWishlistStore((s) => s.ids);
+  const status = useWishlistStore((s) => s.status);
+  const loadError = useWishlistStore((s) => s.error);
   const remove = useWishlistStore((s) => s.remove);
+  const loading = !hydrated || status === "idle" || status === "loading";
   const [moving, setMoving] = useState<Product | null>(null);
   const { getProductById } = useCatalog();
   const items = ids.map(getProductById).filter((p): p is Product => !!p);
@@ -33,17 +36,23 @@ export function WishlistView() {
         <Breadcrumbs items={[{ label: "Wishlist" }]} />
         <h1 className="mt-4 font-display text-4xl font-semibold sm:text-5xl">
           My Wishlist
-          {hydrated && items.length > 0 && (
+          {!loading && items.length > 0 && (
             <span className="ml-3 align-middle font-sans text-base font-normal text-muted">
               {items.length} item{items.length === 1 ? "" : "s"}
             </span>
           )}
         </h1>
 
-        {!hydrated ? (
+        {loading ? (
           <div className="mt-8">
             <ProductGridSkeleton count={4} />
           </div>
+        ) : status === "error" ? (
+          <EmptyState icon={<Heart size={40} />} title="We couldn't load your wishlist" description={loadError ?? "Please try again."}>
+            <button type="button" onClick={() => void useWishlistStore.getState().sync()} className="btn-primary mt-7">
+              <RotateCw size={16} /> Try again
+            </button>
+          </EmptyState>
         ) : items.length === 0 ? (
           <EmptyState
             icon={<Heart size={40} />}
@@ -148,11 +157,13 @@ function MoveToCart({ product, onDone }: { product: Product; onDone: () => void 
       <button
         type="button"
         className="btn-primary mt-6 w-full"
-        onClick={() => {
-          if (p.addToCart()) onDone();
+        disabled={p.adding}
+        aria-busy={p.adding || undefined}
+        onClick={async () => {
+          if ((await p.addToCart()) === "added") onDone();
         }}
       >
-        <ShoppingBag size={17} /> Move to Bag
+        {p.adding ? <Loader2 size={17} className="animate-spin" /> : <ShoppingBag size={17} />} {p.adding ? "Moving…" : "Move to Bag"}
       </button>
     </div>
   );

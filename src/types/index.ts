@@ -157,6 +157,31 @@ export interface Coupon {
   description: string;
 }
 
+/** Bag and wishlist limits — enforced by the server, mirrored in the UI. */
+export const MAX_LINE_QUANTITY = 20;
+export const MAX_CART_LINES = 50;
+export const MAX_WISHLIST_ITEMS = 200;
+
+/**
+ * The bag as returned by /api/v1/cart. Every price is read from MongoDB at request time.
+ * In each line `key` is the variant SKU (the line ID in /api/v1/cart/items/:id) and `stock` is
+ * that variant's currently available units.
+ */
+export interface CartSnapshot {
+  items: CartItem[];
+  itemCount: number;
+  /** Rupees, from live variant prices. */
+  subtotal: number;
+  mrpTotal: number;
+  /** What changed since the bag was last seen: sold-out or removed items, reduced quantities. */
+  notices: string[];
+}
+
+export interface WishlistSnapshot {
+  /** Public product IDs, newest first. Products no longer on sale are left out. */
+  items: { productId: string; addedAt: string }[];
+}
+
 export interface CartTotals {
   itemCount: number;
   subtotal: number;

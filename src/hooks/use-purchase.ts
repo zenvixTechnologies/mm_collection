@@ -32,6 +32,7 @@ export function usePurchase(product: Product) {
   const [quantity, setQuantity] = useState(1);
   const [errors, setErrors] = useState<PurchaseErrors>({});
   const [justAdded, setJustAdded] = useState(false);
+  const [adding, setAdding] = useState(false);
 
   const soldOut = product.stock <= 0;
   const available = Math.max(0, product.stock - inCartQty);
@@ -60,16 +61,21 @@ export function usePurchase(product: Product) {
     return !next.size && !next.color;
   };
 
-  const addToCart = (opts: { openDrawer?: boolean } = {}) => {
-    if (soldOut) return false;
+  /**
+   * Adds the chosen variant to the bag (checked against live stock and priced by the server).
+   * Resolves to "added", "options" (a size/colour still has to be picked) or "error".
+   */
+  const addToCart = async (opts: { openDrawer?: boolean } = {}): Promise<"added" | "options" | "error"> => {
+    if (soldOut || adding) return "error";
     if (!validate()) {
       toast.error(missingMessage());
-      return false;
+      return "options";
     }
-    const res = addItem(product, size, color, quantity);
+    setAdding(true);
+    const res = await addItem(product, size, color, quantity).finally(() => setAdding(false));
     if (!res.ok) {
       toast.error(res.error);
-      return false;
+      return "error";
     }
     if (res.quantity < quantity) {
       toast.info(`Only ${res.quantity} more could be added — that's all we have in stock.`);
@@ -80,7 +86,7 @@ export function usePurchase(product: Product) {
     setJustAdded(true);
     window.setTimeout(() => setJustAdded(false), 1800);
     if (opts.openDrawer) setCartOpen(true);
-    return true;
+    return "added";
   };
 
   const buyNow = () => {
@@ -120,6 +126,7 @@ export function usePurchase(product: Product) {
     available,
     maxQty,
     justAdded,
+    adding,
     addToCart,
     buyNow,
   };

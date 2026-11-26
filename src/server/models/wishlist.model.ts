@@ -20,6 +20,8 @@ const WishlistSchema = new Schema(
       default: [],
       validate: { validator: (v: unknown[]) => v.length <= 200, message: "Wishlist is full" },
     },
+    /** Bumped on every write; merges are compare-and-set on it (see Cart.revision). */
+    revision: { type: Number, min: 0, default: 0 },
     expiresAt: { type: Date, default: null },
   },
   baseOptions,

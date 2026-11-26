@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Trash2 } from "lucide-react";
-import type { CartItem } from "@/types";
+import { MAX_LINE_QUANTITY, type CartItem } from "@/types";
 import { getAudience } from "@/data/audiences";
 import { useCatalog } from "@/components/catalog/CatalogProvider";
 import { formatPrice } from "@/lib/utils";
@@ -15,16 +15,14 @@ import { QuantitySelector } from "@/components/ui/QuantitySelector";
 export function CartLine({ item, compact = false, onNavigate }: { item: CartItem; compact?: boolean; onNavigate?: () => void }) {
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const removeItem = useCartStore((s) => s.removeItem);
-  const othersQty = useCartStore((s) =>
-    s.items.filter((i) => i.productId === item.productId && i.key !== item.key).reduce((n, i) => n + i.quantity, 0),
-  );
   const { getProductById } = useCatalog();
-  const max = Math.max(1, item.stock - othersQty);
+  // `stock` is this size/colour's live available units, from the server.
+  const max = Math.max(1, Math.min(MAX_LINE_QUANTITY, item.stock));
   // Bags saved before audiences existed have no `audience` — look it up from the catalogue.
   const audience = item.audience ?? getProductById(item.productId)?.audienceCategory;
 
-  const change = (q: number) => {
-    const res = updateQuantity(item.key, q);
+  const change = async (q: number) => {
+    const res = await updateQuantity(item.key, q);
     if (!res.ok) toast.error(res.error);
   };
 
@@ -50,9 +48,8 @@ export function CartLine({ item, compact = false, onNavigate }: { item: CartItem
           </Link>
           <button
             type="button"
-            onClick={() => {
-              removeItem(item.key);
-              toast.info(`${item.name} removed from bag`);
+            onClick={async () => {
+              if (await removeItem(item.key)) toast.info(`${item.name} removed from bag`);
             }}
             className="-mt-1 -mr-1 shrink-0 rounded-full p-2 text-muted transition-colors hover:bg-danger-soft hover:text-danger"
             aria-label={`Remove ${item.name} from bag`}
@@ -71,7 +68,7 @@ export function CartLine({ item, compact = false, onNavigate }: { item: CartItem
         </p>
         {!compact && <p className="mt-1 text-[13px] text-muted">Unit price: {formatPrice(item.price)}</p>}
         <div className="mt-auto flex flex-wrap items-end justify-between gap-2 pt-3">
-          <QuantitySelector value={item.quantity} max={max} onChange={change} size="sm" label={`Quantity for ${item.name}`} />
+          <QuantitySelector value={item.quantity} max={max} onChange={(q) => void change(q)} size="sm" label={`Quantity for ${item.name}`} />
           <div className="text-right">
             <p className="font-semibold">{formatPrice(item.price * item.quantity)}</p>
             {item.originalPrice > item.price && (

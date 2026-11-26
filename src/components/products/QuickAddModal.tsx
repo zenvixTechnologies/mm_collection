@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Check, ShoppingBag } from "lucide-react";
+import { Check, Loader2, ShoppingBag } from "lucide-react";
 import { useCatalog } from "@/components/catalog/CatalogProvider";
 import { usePurchase } from "@/hooks/use-purchase";
 import { useUIStore } from "@/store/ui-store";
@@ -69,13 +69,14 @@ function QuickAddBody({ product, onDone }: { product: Product; onDone: () => voi
           <button
             type="button"
             className="btn-primary flex-1"
-            disabled={p.soldOut}
-            onClick={() => {
-              if (p.addToCart()) window.setTimeout(onDone, 450);
+            disabled={p.soldOut || p.adding}
+            aria-busy={p.adding || undefined}
+            onClick={async () => {
+              if ((await p.addToCart()) === "added") window.setTimeout(onDone, 450);
             }}
           >
-            {p.justAdded ? <Check size={18} /> : <ShoppingBag size={18} />}
-            {p.justAdded ? "Added" : "Add to Bag"}
+            {p.adding ? <Loader2 size={18} className="animate-spin" /> : p.justAdded ? <Check size={18} /> : <ShoppingBag size={18} />}
+            {p.adding ? "Adding…" : p.justAdded ? "Added" : "Add to Bag"}
           </button>
         </div>
         <Link href={`/product/${product.slug}`} onClick={onDone} className="mt-4 block text-center text-sm font-medium underline underline-offset-4 sm:hidden">

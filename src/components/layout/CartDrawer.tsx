@@ -11,12 +11,14 @@ import { useCartStore } from "@/store/cart-store";
 import { useUIStore } from "@/store/ui-store";
 import { CartLine } from "@/components/cart/CartLine";
 import { Dialog } from "@/components/ui/Dialog";
+import { LineSkeleton } from "@/components/ui/Skeletons";
 
 export function CartDrawer() {
   const open = useUIStore((s) => s.cartOpen);
   const setOpen = useUIStore((s) => s.setCartOpen);
   const items = useCartStore((s) => s.items);
   const couponCode = useCartStore((s) => s.couponCode);
+  const loading = useCartStore((s) => s.status === "idle" || s.status === "loading");
   const pathname = usePathname();
   const totals = calculateTotals(items, couponCode);
   const close = () => setOpen(false);
@@ -49,7 +51,11 @@ export function CartDrawer() {
         ) : undefined
       }
     >
-      {items.length ? (
+      {loading && !items.length ? (
+        <div className="px-5 pt-4">
+          <LineSkeleton rows={2} />
+        </div>
+      ) : items.length ? (
         <div className="px-5 pt-4">
           <ul className="divide-y divide-line">
             <AnimatePresence initial={false}>
