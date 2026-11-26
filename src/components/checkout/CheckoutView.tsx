@@ -7,6 +7,7 @@ import { AlertCircle, CreditCard, Info, Landmark, Loader2, Lock, RotateCw, Shopp
 import { useRef, useState } from "react";
 import { STORE_COUNTRY, type Address, type CheckoutSource, type PaymentMethod, type SavedAddress } from "@/types";
 import { useCheckoutQuote } from "@/hooks/use-checkout-quote";
+import { useRazorpayPayment } from "@/hooks/use-razorpay-payment";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { ApiError, errorMessage } from "@/lib/api-client";
 import { newIdempotencyKey, placeOrder as submitOrder } from "@/lib/checkout-api";
@@ -98,6 +99,7 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
   // One key per checkout attempt: resubmitting (double click, retry after a dropped connection)
   // returns the order already created instead of placing a second one.
   const attemptKey = useRef<string | null>(null);
+  const { pay } = useRazorpayPayment();
 
   // Prefill once from the signed-in account.
   if (hydrated && user && prefilledFor !== user.id) {
@@ -182,6 +184,10 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
       if (isBuyNow) clearBuyNow();
       else orderPlaced(); // the server emptied the bag in the same transaction
       attemptKey.current = null;
+      // The order exists and its items are reserved: now pay for its stored total. Whatever happens
+      // in the payment window, the order page shows the server's verdict (and lets them pay again).
+      const outcome = await pay(result.order.id, { token: result.accessToken, method: payment });
+      if (outcome === "dismissed") toast.info("Payment not completed — your items are reserved for 30 minutes. You can pay from the next page.");
       router.replace(`/order-success?id=${result.order.id}`);
     } catch (err) {
       setPlacing(false);
@@ -473,7 +479,7 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
               <OrderSummary totals={totals} couponCode={quote.coupon?.status === "applied" ? quote.coupon.code : null} title="Price details">
                 <button type="submit" disabled={placing} className="btn-accent mt-5 hidden min-h-13 w-full text-[15px] lg:flex">
                   {placing ? <Loader2 size={18} className="animate-spin" /> : <Lock size={16} />}
-                  {placing ? "Placing your order…" : `Place Order · ${formatPrice(totals.total)}`}
+                  {placing ? "Processing payment…" : `Place Order · ${formatPrice(totals.total)}`}
                 </button>
                 <p className="mt-3 hidden text-center text-xs text-muted lg:block">
                   By placing your order you agree to our{" "}
@@ -499,7 +505,7 @@ export function CheckoutView({ mode }: { mode: "cart" | "buy-now" }) {
           </div>
           <button type="submit" disabled={placing || !totals} className="btn-accent min-h-12 flex-1">
             {placing ? <Loader2 size={18} className="animate-spin" /> : <Lock size={15} />}
-            {placing ? "Placing…" : "Place Order"}
+            {placing ? "Processing…" : "Place Order"}
           </button>
         </div>
       </form>

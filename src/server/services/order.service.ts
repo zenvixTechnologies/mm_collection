@@ -56,7 +56,7 @@ export function newOrderNumber() {
 
 /* ---------- Storefront view ---------- */
 
-const STATUS_LABEL: Record<DbStatus, StoreOrderStatus> = {
+export const STATUS_LABEL: Record<DbStatus, StoreOrderStatus> = {
   pending_payment: "Payment Pending",
   placed: "Order Placed",
   confirmed: "Confirmed",
@@ -98,6 +98,11 @@ export interface OrderDoc {
   paymentMethod?: PaymentMethod | null;
   status: DbStatus;
   paymentStatus: string;
+  razorpayOrderId?: string | null;
+  razorpayPaymentId?: string | null;
+  paymentMode?: "test" | "live" | null;
+  paidAt?: Date | null;
+  paymentAttemptCount?: number;
   statusHistory?: { status: DbStatus; at: Date }[];
   reservationExpiresAt?: Date | null;
   stockReleased?: boolean;
@@ -137,7 +142,34 @@ export function toOrderView(o: OrderDoc): StoreOrder {
     total: o.totalPaise / 100,
     status: STATUS_LABEL[o.status],
     history,
+    paymentState: paymentStateOf(o),
+    ...(o.paymentStatus === "captured" && o.razorpayPaymentId
+      ? {
+          payment: {
+            provider: "razorpay" as const,
+            mode: o.paymentMode ?? "test",
+            razorpayOrderId: o.razorpayOrderId ?? "",
+            razorpayPaymentId: o.razorpayPaymentId,
+            currency: "INR" as const,
+            amount: o.totalPaise / 100,
+          },
+        }
+      : {}),
   };
+}
+
+export function paymentStateOf(o: Pick<OrderDoc, "paymentStatus">): NonNullable<StoreOrder["paymentState"]> {
+  switch (o.paymentStatus) {
+    case "captured":
+      return "paid";
+    case "refunded":
+    case "partially_refunded":
+      return "refunded";
+    case "failed":
+      return "failed";
+    default:
+      return "pending";
+  }
 }
 
 /* ---------- Reads ---------- */
@@ -157,13 +189,23 @@ export async function listCustomerOrders(userId: string, { page, limit }: { page
  * One order, for its owner only: the signed-in customer it belongs to, or whoever holds its
  * guest access token. Anyone else gets the same 404 as for an order that doesn't exist.
  */
-export async function getOrderForViewer(orderNumber: string, viewer: { userId?: string | null; token?: string | null }) {
+export async function getOrderForViewer(orderNumber: string, viewer: OrderViewer) {
+  return toOrderView(await loadOrderForViewer(orderNumber, viewer));
+}
+
+export interface OrderViewer {
+  userId?: string | null;
+  token?: string | null;
+}
+
+/** The stored order (raw), after the same ownership check as getOrderForViewer. */
+export async function loadOrderForViewer(orderNumber: string, viewer: OrderViewer) {
   await connectToDatabase();
   const order = await Order.findOne({ orderNumber }).select("+accessNonce").lean<OrderDoc>();
   const owns = !!order && !!viewer.userId && !!order.user && String(order.user) === viewer.userId;
   const hasToken = !!order && !!viewer.token && tokenMatches(viewer.token, order._id, order.accessNonce);
   if (!order || !(owns || hasToken)) throw notFound("We couldn't find that order.");
-  return toOrderView(order);
+  return order;
 }
 
 /* ---------- Ending unpaid orders ---------- */
@@ -178,7 +220,7 @@ type EndStatus = Extract<DbStatus, "expired" | "cancelled" | "payment_failed">;
 export async function releaseUnpaidOrder(orderId: Types.ObjectId, to: EndStatus, actor: StockActor, note: string) {
   return withTransaction(async (session) => {
     const order = await Order.findOneAndUpdate(
-      { _id: orderId, status: "pending_payment", stockReleased: false },
+      { _id: orderId, status: "pending_payment", stockReleased: false, paymentStatus: { $ne: "captured" } },
       {
         $set: { status: to, stockReleased: true, ...(to === "payment_failed" ? { paymentStatus: "failed" } : {}) },
         $push: { statusHistory: { status: to, at: new Date(), by: actor, note } },
@@ -201,22 +243,28 @@ export async function releaseUnpaidOrder(orderId: Types.ObjectId, to: EndStatus,
   });
 }
 
+/** Asked before an overdue order is released: may the hold go ("release") or not yet ("keep")? */
+export type ExpiryCheck = (order: { _id: Types.ObjectId; paymentAttemptCount?: number; reservationExpiresAt?: Date | null }) => Promise<"release" | "keep">;
+
 /**
  * Expires unpaid orders whose hold time has passed, oldest first. Called by the cron endpoint and,
  * opportunistically, before checkout — so abandoned checkouts never keep stock off sale for long.
+ * `check` (the payment service's) asks the gateway first, so stock is never released while a
+ * payment for the order succeeded or may still be processing.
  */
-export async function expireStaleOrders({ limit = 50, now = new Date() }: { limit?: number; now?: Date } = {}) {
+export async function expireStaleOrders({ limit = 50, now = new Date(), check }: { limit?: number; now?: Date; check?: ExpiryCheck } = {}) {
   await connectToDatabase();
   const due = await Order.find(
     { status: "pending_payment", stockReleased: false, reservationExpiresAt: { $lte: now } },
-    { _id: 1 },
+    { _id: 1, paymentAttemptCount: 1, reservationExpiresAt: 1 },
   )
     .sort({ reservationExpiresAt: 1 })
     .limit(limit)
-    .lean<{ _id: Types.ObjectId }[]>();
+    .lean<{ _id: Types.ObjectId; paymentAttemptCount?: number; reservationExpiresAt?: Date | null }[]>();
   let expired = 0;
   for (const o of due) {
     try {
+      if (check && (await check(o)) === "keep") continue;
       if (await releaseUnpaidOrder(o._id, "expired", { type: "system", name: "reservation expiry" }, "Payment not completed in time")) expired++;
     } catch (err) {
       logger.error("order.expire_failed", { orderId: String(o._id), error: serializeError(err) });

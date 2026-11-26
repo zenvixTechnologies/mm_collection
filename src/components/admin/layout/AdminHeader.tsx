@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bell, ChevronDown, CreditCard, ExternalLink, LogOut, Menu, Package, Search, Settings, ShoppingBag, User, Users } from "lucide-react";
 import { useCallback, useId, useMemo, useRef, useState } from "react";
+import type { AdminOrder, AdminPage, CustomerWithStats } from "@/types/admin";
+import { useAdminQuery, withQuery } from "@/hooks/use-admin-query";
+import { useDebounced } from "@/hooks/use-debounced";
 import { cn } from "@/lib/utils";
 import { useAdminSession, useAdminStore } from "@/store/admin-store";
 import { toast } from "@/store/ui-store";
@@ -31,8 +34,15 @@ function GlobalSearch() {
   useDismiss(ref, open, close);
 
   const products = useAdminStore((s) => s.products);
-  const orders = useAdminStore((s) => s.orders);
-  const customers = useAdminStore((s) => s.customers);
+  // Orders and customers are searched on the server (only what this admin may see).
+  const term = useDebounced(q.trim(), 250);
+  const canOrders = useAdminSession((s) => s.can("orders:read"));
+  const canCustomers = useAdminSession((s) => s.can("customers:read"));
+  const remote = term.length >= 2;
+  const orderHits = useAdminQuery<AdminPage<AdminOrder>>(remote && canOrders ? withQuery("/orders", { q: term, limit: 4 }) : null);
+  const customerHits = useAdminQuery<AdminPage<CustomerWithStats>>(remote && canCustomers ? withQuery("/customers", { q: term, limit: 4 }) : null);
+  const orders = useMemo(() => (remote && canOrders ? (orderHits.data?.items ?? []) : []), [remote, canOrders, orderHits.data]);
+  const customers = useMemo(() => (remote && canCustomers ? (customerHits.data?.items ?? []) : []), [remote, canCustomers, customerHits.data]);
 
   const results = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -40,7 +50,6 @@ function GlobalSearch() {
     const has = (...v: string[]) => v.some((x) => x.toLowerCase().includes(term));
     return [
       ...orders
-        .filter((o) => has(o.id, o.customer.fullName))
         .slice(0, 4)
         .map((o) => ({ id: `o-${o.id}`, icon: ShoppingBag, title: o.id, sub: `${o.customer.fullName} · ${o.status}`, href: `/mm-hub/orders/${o.id}` })),
       ...products
@@ -48,7 +57,6 @@ function GlobalSearch() {
         .slice(0, 4)
         .map((p) => ({ id: `p-${p.id}`, icon: Package, title: p.name, sub: p.sku, href: `/mm-hub/products?q=${encodeURIComponent(p.sku)}` })),
       ...customers
-        .filter((c) => has(c.fullName, c.email, c.mobile))
         .slice(0, 4)
         .map((c) => ({ id: `c-${c.id}`, icon: Users, title: c.fullName, sub: c.email, href: `/mm-hub/customers/${c.id}` })),
     ];

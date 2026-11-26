@@ -17,7 +17,6 @@ import type { CheckoutSourceInput, PlaceOrderInput } from "@/server/validation/c
 import { evaluateCoupon, takeCouponUse, type CouponEvaluation, type CouponIdentity } from "./coupon.service";
 import { findVariant, isPublicProduct, publicProductFilter, type CartProductDoc } from "./cart.service";
 import {
-  expireStaleOrders,
   newAccessNonce,
   newOrderNumber,
   orderAccessToken,
@@ -25,6 +24,7 @@ import {
   toOrderView,
   type OrderDoc,
 } from "./order.service";
+import { expireUnpaidOrders } from "./payment.service";
 import { reserveVariant, type StockActor } from "./stock-reservation.service";
 
 /**
@@ -251,10 +251,13 @@ export async function quoteCheckout(
   return toQuote(priced, coupon);
 }
 
-/** Expired unpaid orders give their stock back before availability is checked. Never blocks checkout. */
+/**
+ * Expired unpaid orders give their stock back before availability is checked (after Razorpay
+ * confirms they weren't paid). Never blocks checkout; the cron endpoint does the bulk of this.
+ */
 async function releaseExpiredHolds() {
   try {
-    await expireStaleOrders({ limit: 20 });
+    await expireUnpaidOrders({ limit: 5 });
   } catch (err) {
     logger.warn("checkout.expire_sweep_failed", { error: serializeError(err) });
   }

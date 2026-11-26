@@ -27,6 +27,9 @@ const CouponSchema = new Schema(
     /** Empty = whole catalogue. */
     categories: { type: [{ type: Schema.Types.ObjectId, ref: "Category" }], default: [] },
     products: { type: [{ type: Schema.Types.ObjectId, ref: "Product" }], default: [] },
+    /** Never discounted, even when inside an applicable category. */
+    excludedCategories: { type: [{ type: Schema.Types.ObjectId, ref: "Category" }], default: [] },
+    excludedProducts: { type: [{ type: Schema.Types.ObjectId, ref: "Product" }], default: [] },
   },
   baseOptions,
 );

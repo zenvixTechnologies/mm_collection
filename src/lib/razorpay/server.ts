@@ -8,6 +8,7 @@
  */
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { getEnv, isConfigured } from "@/server/config/env";
 
 const API = "https://api.razorpay.com/v1";
 
@@ -21,15 +22,24 @@ export interface RazorpayConfig {
 }
 
 /**
- * Reads keys from the environment. Test keys start with `rzp_test_`, live keys with `rzp_live_`,
- * so switching to Live Mode after account approval only means swapping the two env vars.
+ * Validated keys (src/server/config/env.ts). Test keys start with `rzp_test_`, live keys with
+ * `rzp_live_`; live keys are refused unless RAZORPAY_ALLOW_LIVE=true. Throws ConfigError (→ 503,
+ * variable names logged, never values) when keys are missing or invalid.
  */
+export function razorpayConfig(): RazorpayConfig {
+  const env = getEnv("razorpay");
+  const keyId = env.RAZORPAY_KEY_ID.trim();
+  return { keyId, keySecret: env.RAZORPAY_KEY_SECRET.trim(), mode: keyId.startsWith("rzp_live_") ? "live" : "test" };
+}
+
+/** Same as razorpayConfig(), but null instead of throwing when payments aren't configured. */
 export function getRazorpayConfig(): RazorpayConfig | null {
-  const keyId = process.env.RAZORPAY_KEY_ID?.trim();
-  const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
-  if (!keyId || !keySecret) return null;
-  const mode = keyId.startsWith("rzp_live_") ? "live" : "test";
-  return { keyId, keySecret, mode };
+  return isConfigured("razorpay") ? razorpayConfig() : null;
+}
+
+/** RAZORPAY_WEBHOOK_SECRET (throws ConfigError when unset). */
+export function webhookSecret() {
+  return getEnv("razorpayWebhook").RAZORPAY_WEBHOOK_SECRET;
 }
 
 export class RazorpayError extends Error {
@@ -44,7 +54,7 @@ export class RazorpayError extends Error {
 export async function razorpayRequest<T>(
   config: RazorpayConfig,
   path: string,
-  init: { method?: "GET" | "POST"; body?: unknown } = {},
+  init: { method?: "GET" | "POST"; body?: unknown; timeoutMs?: number } = {},
 ): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     method: init.method ?? "GET",
@@ -54,6 +64,8 @@ export async function razorpayRequest<T>(
     },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
     cache: "no-store",
+    // Never hang a request (or a checkout) on a slow gateway.
+    signal: AbortSignal.timeout(init.timeoutMs ?? 10_000),
   });
   const data = (await res.json().catch(() => ({}))) as T & { error?: { description?: string } };
   if (!res.ok) throw new RazorpayError(data.error?.description ?? `Razorpay request failed (${res.status})`, res.status);
@@ -67,6 +79,17 @@ export function verifyPaymentSignature(orderId: string, paymentId: string, signa
   const a = Buffer.from(expected, "utf8");
   const b = Buffer.from(signature, "utf8");
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * Webhook signature: HMAC-SHA256(raw request body, webhook secret), hex, sent as
+ * X-Razorpay-Signature. Must be computed over the exact bytes received — before JSON parsing.
+ */
+export function verifyWebhookSignature(rawBody: string, signature: string | null, secret: string) {
+  if (!signature || !/^[a-f0-9]{64}$/i.test(signature)) return false;
+  const expected = Buffer.from(createHmac("sha256", secret).update(rawBody, "utf8").digest("hex"), "utf8");
+  const given = Buffer.from(signature.toLowerCase(), "utf8");
+  return expected.length === given.length && timingSafeEqual(expected, given);
 }
 
 export interface RazorpayOrder {
@@ -87,6 +110,16 @@ export interface RazorpayPayment {
   method: string;
   international: boolean;
   captured: boolean;
+  error_code?: string | null;
+  error_description?: string | null;
+  error_reason?: string | null;
+  bank?: string | null;
+  wallet?: string | null;
+  vpa?: string | null;
+  card?: { network?: string | null; type?: string | null } | null;
+  fee?: number | null;
+  tax?: number | null;
+  created_at?: number;
 }
 
 /** Checks that a fetched payment is a domestic INR payment for this order. Returns an error message or null. */

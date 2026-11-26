@@ -1,6 +1,6 @@
 "use client";
 
-import type { CheckoutQuote, CheckoutSource, PaymentMethod, PlacedOrder, PublicCoupon, StoreOrder } from "@/types";
+import type { CheckoutQuote, CheckoutSource, PaymentMethod, PaymentStart, PaymentStatusView, PlacedOrder, PublicCoupon, StoreOrder } from "@/types";
 import type { PaginationMeta } from "@/types/api";
 import { ApiError } from "./api-client";
 import { customerApi } from "./customer-api";
@@ -83,4 +83,37 @@ export async function fetchOrder(id: string, token?: string | null, signal?: Abo
 export async function fetchMyOrders(page: number, limit = 10): Promise<{ orders: StoreOrder[]; pagination: PaginationMeta | undefined }> {
   const { data, pagination } = await call<StoreOrder[]>(`/orders?page=${page}&limit=${limit}`);
   return { orders: data, pagination };
+}
+
+/* ---------- Payments (Razorpay) ---------- */
+
+const orderHeaders = (token?: string | null) => (token ? { "X-Order-Token": token } : undefined);
+
+/** Server-created Razorpay order for a stored order (amount = the order's stored total). */
+export async function startPayment(orderId: string, token: string | null, { retry = false } = {}) {
+  const path = retry ? `/payments/${encodeURIComponent(orderId)}/retry` : "/payments/razorpay/create";
+  const { data } = await call<PaymentStart>(path, { method: "POST", body: retry ? {} : { orderId }, headers: orderHeaders(token) });
+  return data;
+}
+
+/** Hands Razorpay's success callback to the server, which verifies it before anything changes. */
+export async function verifyPayment(
+  orderId: string,
+  token: string | null,
+  cb: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string },
+) {
+  const { data } = await call<{ result: "paid" | "processing" | "failed"; order: StoreOrder }>("/payments/razorpay/verify", {
+    method: "POST",
+    body: { orderId, ...cb },
+    headers: orderHeaders(token),
+  });
+  return data;
+}
+
+/** Payment status; `refresh` asks Razorpay first (after Checkout was closed or the connection dropped). */
+export async function fetchPaymentStatus(orderId: string, token: string | null, { refresh = false } = {}) {
+  const { data } = await call<PaymentStatusView>(`/payments/${encodeURIComponent(orderId)}/status${refresh ? "?refresh=1" : ""}`, {
+    headers: orderHeaders(token),
+  });
+  return data;
 }

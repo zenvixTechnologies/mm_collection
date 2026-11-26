@@ -9,6 +9,7 @@ import { formatDate, formatPrice } from "@/lib/utils";
 import { toast } from "@/store/ui-store";
 import { AddressBlock, OrderItems, OrderTotals, PAYMENT_LABEL } from "@/components/account/OrderParts";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PayNow } from "./PayNow";
 
 export function OrderSuccessView({ id }: { id: string }) {
   const hydrated = useHydrated();
@@ -87,6 +88,7 @@ export function OrderSuccessView({ id }: { id: string }) {
               </>
             )}
           </p>
+          <PayNow order={order} onChange={retry} />
           {order.payment ? (
             <p className="mx-auto mt-3 max-w-md text-xs text-muted">
               Paid {formatPrice(order.payment.amount)} via Razorpay · Payment ID {order.payment.razorpayPaymentId}

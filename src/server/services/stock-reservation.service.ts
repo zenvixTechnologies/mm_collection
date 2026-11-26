@@ -28,7 +28,7 @@ export interface StockVariant {
 }
 
 export interface StockActor {
-  type: "customer" | "system";
+  type: "customer" | "system" | "admin";
   id?: Types.ObjectId | string | null;
   name: string;
 }
@@ -122,4 +122,142 @@ export async function releaseVariant(
     { session },
   );
   return units;
+}
+
+/**
+ * Payment confirmed: the units this order held become a sale — reserved −= qty and stock −= qty
+ * (ledger "sale"), and the product's sold count goes up. Fails rather than selling units the
+ * order doesn't hold.
+ */
+export async function sellReservedVariant(
+  session: ClientSession,
+  args: { productId: Types.ObjectId; sku: string; quantity: number; orderId: Types.ObjectId; actor: StockActor },
+) {
+  const product = await Product.findById(args.productId, { variants: 1 }).session(session).lean<{ variants: StockVariant[] }>();
+  const v = product?.variants.find((x) => x.sku === args.sku);
+  if (!product || !v || v.reserved < args.quantity || v.stock < args.quantity) {
+    throw new AppError(409, "CONFLICT", "Reserved stock for this order is missing — it needs staff attention.");
+  }
+  const stockAfter = v.stock - args.quantity;
+  const reservedAfter = v.reserved - args.quantity;
+  const after = product.variants.map((x) => (x.sku === v.sku ? { ...x, stock: stockAfter, reserved: reservedAfter } : x));
+  const res = await Product.updateOne(
+    { _id: args.productId, variants: { $elemMatch: { sku: v.sku, stock: v.stock, reserved: v.reserved } } },
+    {
+      $inc: { "variants.$.stock": -args.quantity, "variants.$.reserved": -args.quantity, soldCount: args.quantity },
+      $set: { inStock: after.some((x) => x.isActive !== false && x.stock - x.reserved > 0) },
+    },
+    { session },
+  );
+  if (res.modifiedCount !== 1) throw new AppError(409, "CONFLICT", "Stock changed while confirming the payment. Please retry.");
+  await InventoryMovement.insertMany(
+    [
+      {
+        product: args.productId,
+        variantSku: v.sku,
+        type: "sale",
+        stockChange: -args.quantity,
+        reservedChange: -args.quantity,
+        stockAfter,
+        reservedAfter,
+        order: args.orderId,
+        actor: args.actor,
+        note: "Payment confirmed — reserved units sold",
+      },
+    ],
+    { session },
+  );
+}
+
+/**
+ * A payment that arrived after the order's hold was released: sell the units again from what is
+ * available now, if every line still can be (callers check first with `canSellAvailable`).
+ */
+export async function canSellAvailable(session: ClientSession, lines: { productId: Types.ObjectId; sku: string; quantity: number }[]) {
+  for (const l of lines) {
+    const p = await Product.findById(l.productId, { variants: 1 }).session(session).lean<{ variants: StockVariant[] }>();
+    const v = p?.variants.find((x) => x.sku === l.sku);
+    if (!v || v.stock - v.reserved < l.quantity) return false;
+  }
+  return true;
+}
+
+export async function sellAvailableVariant(
+  session: ClientSession,
+  args: { productId: Types.ObjectId; sku: string; quantity: number; orderId: Types.ObjectId; actor: StockActor },
+) {
+  const product = await Product.findById(args.productId, { variants: 1 }).session(session).lean<{ variants: StockVariant[] }>();
+  const v = product?.variants.find((x) => x.sku === args.sku);
+  if (!product || !v || v.stock - v.reserved < args.quantity) throw new AppError(409, "CONFLICT", "Not enough stock to fulfil a late payment.");
+  const stockAfter = v.stock - args.quantity;
+  const after = product.variants.map((x) => (x.sku === v.sku ? { ...x, stock: stockAfter } : x));
+  const res = await Product.updateOne(
+    { _id: args.productId, variants: { $elemMatch: { sku: v.sku, stock: v.stock, reserved: v.reserved } } },
+    { $inc: { "variants.$.stock": -args.quantity, soldCount: args.quantity }, $set: { inStock: after.some((x) => x.isActive !== false && x.stock - x.reserved > 0) } },
+    { session },
+  );
+  if (res.modifiedCount !== 1) throw new AppError(409, "CONFLICT", "Stock changed while confirming the payment. Please retry.");
+  await InventoryMovement.insertMany(
+    [
+      {
+        product: args.productId,
+        variantSku: v.sku,
+        type: "sale",
+        stockChange: -args.quantity,
+        reservedChange: 0,
+        stockAfter,
+        reservedAfter: v.reserved,
+        order: args.orderId,
+        actor: args.actor,
+        note: "Paid after the reservation expired — sold from available stock",
+      },
+    ],
+    { session },
+  );
+}
+
+/**
+ * A paid order cancelled before it shipped: its sold units go back on the shelf — stock += qty,
+ * ledger "return", sold count down. Runs in the caller's transaction with the status change, so it
+ * happens exactly once (the cancellation is a one-way status move).
+ */
+export async function restockVariant(
+  session: ClientSession,
+  args: { productId: Types.ObjectId; sku: string; quantity: number; orderId: Types.ObjectId; actor: StockActor; note: string },
+) {
+  const product = await Product.findById(args.productId, { variants: 1, soldCount: 1 }).session(session).lean<{ variants: StockVariant[]; soldCount?: number }>();
+  const v = product?.variants.find((x) => x.sku === args.sku);
+  if (!product || !v) {
+    logger.warn("stock.restock_missing_variant", { orderId: String(args.orderId), sku: args.sku });
+    return 0;
+  }
+  const stockAfter = v.stock + args.quantity;
+  const after = product.variants.map((x) => (x.sku === v.sku ? { ...x, stock: stockAfter } : x));
+  const res = await Product.updateOne(
+    { _id: args.productId, variants: { $elemMatch: { sku: v.sku, stock: v.stock } } },
+    {
+      $inc: { "variants.$.stock": args.quantity, soldCount: -Math.min(args.quantity, product.soldCount ?? 0) },
+      $set: { inStock: after.some((x) => x.isActive !== false && x.stock - x.reserved > 0) },
+    },
+    { session },
+  );
+  if (res.modifiedCount !== 1) throw new AppError(409, "CONFLICT", "Stock changed while cancelling the order. Please retry.");
+  await InventoryMovement.insertMany(
+    [
+      {
+        product: args.productId,
+        variantSku: v.sku,
+        type: "return",
+        stockChange: args.quantity,
+        reservedChange: 0,
+        stockAfter,
+        reservedAfter: v.reserved,
+        order: args.orderId,
+        actor: args.actor,
+        note: args.note,
+      },
+    ],
+    { session },
+  );
+  return args.quantity;
 }

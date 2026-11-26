@@ -167,3 +167,36 @@ export function Segmented<T extends string>({
 export function Toolbar({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn("flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center", className)}>{children}</div>;
 }
+
+/** From/to date filter (yyyy-mm-dd), styled like the other toolbar fields. */
+export function DateRangeFilter({
+  label,
+  from,
+  to,
+  onChange,
+  className,
+}: {
+  label: string;
+  from: string;
+  to: string;
+  onChange: (range: { from: string; to: string }) => void;
+  className?: string;
+}) {
+  const id = useId();
+  return (
+    <fieldset className={cn("flex min-w-0 items-center gap-1.5", className)}>
+      <legend className="sr-only">{label}</legend>
+      <label htmlFor={`${id}-from`} className="sr-only">
+        {label} from
+      </label>
+      <input id={`${id}-from`} type="date" value={from} max={to || undefined} onChange={(e) => onChange({ from: e.target.value, to })} className="field-input field-sm w-full min-w-0" />
+      <span className="text-xs text-muted" aria-hidden>
+        –
+      </span>
+      <label htmlFor={`${id}-to`} className="sr-only">
+        {label} to
+      </label>
+      <input id={`${id}-to`} type="date" value={to} min={from || undefined} onChange={(e) => onChange({ from, to: e.target.value })} className="field-input field-sm w-full min-w-0" />
+    </fieldset>
+  );
+}

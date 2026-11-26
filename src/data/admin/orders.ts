@@ -20,7 +20,7 @@ function historyFor(createdAt: string, status: AdminOrderStatus): AdminOrder["hi
   if (status === "Cancelled") {
     return { "Order Placed": createdAt, Cancelled: hoursAfter(createdAt, 5) };
   }
-  const reached = ORDER_STATUSES.slice(0, ORDER_STATUSES.indexOf(status) + 1);
+  const reached = ORDER_STATUSES.slice(0, ORDER_STATUSES.indexOf(status as (typeof ORDER_STATUSES)[number]) + 1);
   return Object.fromEntries(reached.map((s, i) => [s, hoursAfter(createdAt, STATUS_GAPS[i])]));
 }
 

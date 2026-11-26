@@ -32,6 +32,8 @@ export interface CouponDoc {
   active?: boolean | null;
   categories?: Types.ObjectId[];
   products?: Types.ObjectId[];
+  excludedCategories?: Types.ObjectId[];
+  excludedProducts?: Types.ObjectId[];
 }
 
 /** One priced line, as far as coupon eligibility is concerned. */
@@ -120,15 +122,19 @@ export async function evaluateCoupon(
 
   const products = new Set((coupon.products ?? []).map(String));
   const categories = new Set((coupon.categories ?? []).map(String));
+  const excludedProducts = new Set((coupon.excludedProducts ?? []).map(String));
+  const excludedCategories = new Set((coupon.excludedCategories ?? []).map(String));
   const restricted = products.size > 0 || categories.size > 0;
+  const hasExclusions = excludedProducts.size > 0 || excludedCategories.size > 0;
   const eligiblePaise = lines
     .filter((l) => !restricted || products.has(String(l.product)) || l.categories.some((c) => categories.has(String(c))))
+    .filter((l) => !excludedProducts.has(String(l.product)) && !l.categories.some((c) => excludedCategories.has(String(c))))
     .reduce((sum, l) => sum + l.lineTotalPaise, 0);
-  if (restricted && eligiblePaise === 0) return no(`${coupon.code} doesn't apply to the items in your order.`);
+  if ((restricted || hasExclusions) && eligiblePaise === 0) return no(`${coupon.code} doesn't apply to the items in your order.`);
 
   const min = coupon.minOrderPaise ?? 0;
   if (eligiblePaise < min) {
-    const on = restricted ? " on eligible items" : "";
+    const on = restricted || hasExclusions ? " on eligible items" : "";
     return no(`${coupon.code} needs a minimum order of ${rupees(min)}${on}. Add ${rupees(min - eligiblePaise)} more to use it.`);
   }
 
@@ -192,4 +198,26 @@ export async function listPublicCoupons(now = new Date()): Promise<PublicCoupon[
     minOrder: (c.minOrderPaise ?? 0) / 100,
     maxDiscount: c.maxDiscountPaise != null ? c.maxDiscountPaise / 100 : null,
   }));
+}
+
+/** Order paid: its held coupon use becomes final ("redeemed"). */
+export async function redeemCouponUse(orderId: Types.ObjectId, session: ClientSession) {
+  const res = await CouponRedemption.updateOne({ order: orderId, status: "reserved" }, { $set: { status: "redeemed" } }, { session });
+  return res.modifiedCount === 1;
+}
+
+/**
+ * An order paid after it expired (its coupon use was given back): the customer paid the
+ * discounted total, so the use is counted again — without the usage-limit check, as the money is
+ * already taken.
+ */
+export async function reclaimReleasedCouponUse(orderId: Types.ObjectId, session: ClientSession) {
+  const redemption = await CouponRedemption.findOneAndUpdate(
+    { order: orderId, status: "released" },
+    { $set: { status: "redeemed" } },
+    { session, projection: { coupon: 1 } },
+  ).lean();
+  if (!redemption) return false;
+  await Coupon.updateOne({ _id: redemption.coupon }, { $inc: { usageCount: 1 } }, { session });
+  return true;
 }

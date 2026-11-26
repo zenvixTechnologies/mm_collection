@@ -6,11 +6,17 @@ import { ExternalLink } from "lucide-react";
 import { Logo } from "@/components/layout/Logo";
 import { stockState } from "@/lib/admin/metrics";
 import { cn } from "@/lib/utils";
-import { useAdminStore } from "@/store/admin-store";
+import type { AdminOrder, AdminPage } from "@/types/admin";
+import { useAdminQuery } from "@/hooks/use-admin-query";
+import { useAdminSession, useAdminStore } from "@/store/admin-store";
 import { ADMIN_NAV, isAdminPathActive } from "./admin-nav";
 
 function useNavCounts() {
-  const newOrders = useAdminStore((s) => s.orders.filter((o) => o.status === "Order Placed").length);
+  // Paid orders waiting to be confirmed (from the API; only for admins who can see orders).
+  const canSeeOrders = useAdminSession((s) => s.can("orders:read"));
+  const pathname = usePathname();
+  const { data } = useAdminQuery<AdminPage<AdminOrder>>(canSeeOrders ? `/orders?status=Order%20Placed&limit=1&_nav=${pathname.startsWith("/mm-hub/orders") ? pathname : "x"}` : null);
+  const newOrders = data?.total ?? 0;
   const lowStock = useAdminStore((s) => s.products.filter((p) => p.status !== "archived" && stockState(p) !== "in").length);
   return { newOrders, lowStock };
 }

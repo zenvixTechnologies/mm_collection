@@ -1,28 +1,69 @@
 "use client";
 
 import Link from "next/link";
-import { Globe2, Lock, PackageCheck, Truck } from "lucide-react";
+import { Globe2, Loader2, Lock, PackageCheck, Truck } from "lucide-react";
 import { useState } from "react";
-import type { CourierPartner } from "@/types/admin";
+import type { AdminOrder, AdminPage, AdminSettingsView, CourierPartner, ShippingSettings } from "@/types/admin";
+import { useAdminQuery } from "@/hooks/use-admin-query";
+import { adminApi, errorMessage } from "@/lib/admin-api";
 import { formatDate } from "@/lib/utils";
-import { useAdminStore } from "@/store/admin-store";
+import { useAdminSession } from "@/store/admin-store";
 import { toast } from "@/store/ui-store";
 import { Badge, OrderStatusBadge } from "../ui/Badge";
 import { Switch, TextField } from "../ui/FormControls";
 import { PageHeader } from "../ui/PageHeader";
 import { Panel } from "../ui/Panel";
+import { LoadError } from "../ui/QueryState";
 
+type OrderPage = AdminPage<AdminOrder> & { counts: Record<string, number> };
+
+/** Loads the settings, then shows the editor (keyed so a saved copy resets the form). */
 export function ShippingView() {
-  const shipping = useAdminStore((s) => s.shipping);
-  const orders = useAdminStore((s) => s.orders);
-  const update = useAdminStore((s) => s.updateShipping);
+  const { data, status, error, reload, replace } = useAdminQuery<AdminSettingsView>("/settings");
+  if (status === "loading") return <div className="skeleton h-96 rounded-2xl" role="status" aria-label="Loading" />;
+  if (status === "error" || !data) {
+    return (
+      <div className="card">
+        <LoadError title="Couldn't load shipping settings" message={error} onRetry={reload} />
+      </div>
+    );
+  }
+  return <ShippingEditor key={data.version} shipping={data.shipping} version={data.version} onSaved={replace} />;
+}
+
+function ShippingEditor({ shipping, version, onSaved }: { shipping: ShippingSettings; version: string; onSaved: (v: AdminSettingsView) => void }) {
+  const canWrite = useAdminSession((s) => s.can("shipping:write"));
+  const shipped = useAdminQuery<OrderPage>("/orders?status=Shipped&limit=50");
+  const outForDelivery = useAdminQuery<OrderPage>("/orders?status=Out%20for%20Delivery&limit=50");
   const [estimate, setEstimate] = useState(shipping.deliveryEstimate);
   const [dispatch, setDispatch] = useState(shipping.dispatchTime);
   const [couriers, setCouriers] = useState<CourierPartner[]>(shipping.couriers);
+  const [saving, setSaving] = useState(false);
 
-  const inTransit = orders.filter((o) => o.status === "Shipped" || o.status === "Out for Delivery");
-  const readyToShip = orders.filter((o) => o.status === "Processing" || o.status === "Confirmed").length;
+  const inTransit = [...(shipped.data?.items ?? []), ...(outForDelivery.data?.items ?? [])];
+  const counts = shipped.data?.counts ?? {};
+  const readyToShip = (counts["Order Placed"] ?? 0) + (counts.Confirmed ?? 0) + (counts.Processing ?? 0);
   const dirty = estimate !== shipping.deliveryEstimate || dispatch !== shipping.dispatchTime || JSON.stringify(couriers) !== JSON.stringify(shipping.couriers);
+
+  const save = async () => {
+    if (couriers.every((c) => !c.enabled)) {
+      toast.error("Keep at least one courier enabled.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data } = await adminApi<AdminSettingsView>("/settings/shipping", {
+        method: "PATCH",
+        body: { version, deliveryEstimate: estimate.trim(), dispatchTime: dispatch.trim(), couriers },
+      });
+      onSaved(data);
+      toast.success("Shipping settings saved");
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <>
@@ -31,20 +72,8 @@ export function ShippingView() {
         title="Shipping"
         description="How delivery is described to shoppers, which couriers you use, and what's on the way."
         actions={
-          <button
-            type="button"
-            className="btn-primary btn-sm"
-            disabled={!dirty}
-            onClick={() => {
-              if (couriers.every((c) => !c.enabled)) {
-                toast.error("Keep at least one courier enabled.");
-                return;
-              }
-              update({ deliveryEstimate: estimate.trim(), dispatchTime: dispatch.trim(), couriers });
-              toast.success("Shipping settings saved");
-            }}
-          >
-            Save changes
+          <button type="button" className="btn-primary btn-sm" disabled={!dirty || saving || !canWrite} onClick={() => void save()}>
+            {saving && <Loader2 size={14} className="animate-spin" aria-hidden />} Save changes
           </button>
         }
       />
@@ -101,8 +130,8 @@ export function ShippingView() {
               </span>
               <Badge tone="success">Pan-India</Badge>
             </div>
-            <TextField label="Delivery time" value={estimate} onChange={(e) => setEstimate(e.target.value)} />
-            <TextField label="Dispatch time" value={dispatch} onChange={(e) => setDispatch(e.target.value)} />
+            <TextField label="Delivery time" maxLength={120} value={estimate} disabled={!canWrite} onChange={(e) => setEstimate(e.target.value)} />
+            <TextField label="Dispatch time" maxLength={120} value={dispatch} disabled={!canWrite} onChange={(e) => setDispatch(e.target.value)} />
             <Link href="/shipping-policy" target="_blank" className="inline-block text-[13px] font-semibold text-accent hover:underline">
               View shipping policy page ↗
             </Link>
@@ -124,12 +153,16 @@ export function ShippingView() {
                   label={c.name}
                   description={c.enabled ? "Available for new shipments" : "Not used for new shipments"}
                   checked={c.enabled}
+                  disabled={!canWrite}
                   onChange={(v) => setCouriers(couriers.map((x, j) => (j === i ? { ...x, enabled: v } : x)))}
                 />
                 <TextField
                   className="mt-3"
                   label="Tracking link"
                   value={c.trackingUrlTemplate}
+                  maxLength={300}
+                  disabled={!canWrite}
+                  hint="https:// link containing {awb}"
                   inputClassName="font-mono text-xs"
                   onChange={(e) => setCouriers(couriers.map((x, j) => (j === i ? { ...x, trackingUrlTemplate: e.target.value } : x)))}
                 />
@@ -186,7 +219,14 @@ export function ShippingView() {
                   </td>
                 </tr>
               ))}
-              {!inTransit.length && (
+              {(shipped.status === "loading" || outForDelivery.status === "loading") && !inTransit.length && (
+                <tr>
+                  <td colSpan={6} className="px-5 py-10 text-center text-muted">
+                    Loading…
+                  </td>
+                </tr>
+              )}
+              {shipped.status === "ready" && outForDelivery.status === "ready" && !inTransit.length && (
                 <tr>
                   <td colSpan={6} className="px-5 py-10 text-center text-muted">
                     Nothing in transit right now.

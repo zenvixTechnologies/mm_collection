@@ -11,13 +11,14 @@ import { ProductGrid } from "@/components/products/ProductGrid";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import Link from "next/link";
 import { getCatalog } from "@/server/services/catalog.service";
+import { getStorefrontBanners } from "@/server/services/homepage.service";
 
 /**
  * The homepage is the Women's experience — the brand's primary focus.
  * Men and Kids get one entry point ("Who are you shopping for?") rather than equal billing.
  */
 export default async function HomePage() {
-  const { getBestSellers, getNewArrivals, getProductsByCategory } = await getCatalog();
+  const [{ getBestSellers, getNewArrivals, getProductsByCategory }, banners] = await Promise.all([getCatalog(), getStorefrontBanners()]);
   const newArrivals = getNewArrivals(8, "women");
   const bestSellers = getBestSellers(8, "women");
   const trendingDresses = [...getProductsByCategory("dresses")]
@@ -27,7 +28,7 @@ export default async function HomePage() {
 
   return (
     <>
-      <Hero />
+      <Hero banner={banners.hero} />
       <TrustBar />
 
       <section aria-labelledby="audience-heading" className="container-page mt-14 sm:mt-20">
@@ -96,7 +97,7 @@ export default async function HomePage() {
       </section>
 
       <section aria-label="Seasonal offer" className="container-page mt-16 sm:mt-24">
-        <PromoBanner />
+        <PromoBanner banner={banners.promo} />
       </section>
 
       <section aria-labelledby="why-heading" className="container-page mt-16 sm:mt-24">

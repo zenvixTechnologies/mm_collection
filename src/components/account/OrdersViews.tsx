@@ -13,6 +13,7 @@ import { useCurrentUser } from "@/store/auth-store";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ProductImage } from "@/components/ui/ProductImage";
+import { PayNow } from "@/components/checkout/PayNow";
 import { AccountShell } from "./AccountNav";
 import { AddressBlock, OrderItems, OrderTimeline, OrderTotals, PAYMENT_LABEL, StatusBadge } from "./OrderParts";
 
@@ -188,6 +189,7 @@ export function OrderDetailView({ id }: { id: string }) {
             <StatusBadge status={order.status} />
           </div>
           <OrderTimeline order={order} />
+          <PayNow order={order} onChange={retry} />
         </section>
         <div className="grid gap-5 md:grid-cols-[1fr_280px]">
           <section className="rounded-2xl border border-line p-5 sm:p-6">

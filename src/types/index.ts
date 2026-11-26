@@ -224,6 +224,16 @@ export interface CheckoutQuote {
   currency: "INR";
 }
 
+/** A homepage banner the storefront shows (active and within its dates). */
+export interface StorefrontBanner {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  ctaLabel: string;
+  ctaHref: string;
+  image: string;
+}
+
 /** A coupon the storefront may advertise (GET /api/v1/coupons). */
 export interface PublicCoupon {
   code: string;
@@ -351,6 +361,39 @@ export interface Order {
 export interface StoreOrder extends Omit<Order, "status" | "history"> {
   status: StoreOrderStatus;
   history: Partial<Record<StoreOrderStatus, string>>;
+  /**
+   * Payment as far as the customer is concerned: pending (not paid yet), failed (the last attempt
+   * failed — they can try again while the order is reserved), paid or refunded.
+   */
+  paymentState?: "pending" | "failed" | "paid" | "refunded";
+}
+
+/** POST /api/v1/payments/razorpay/create and /payments/:id/retry — what Razorpay Checkout needs. */
+export interface PaymentStart {
+  /** Public Key ID only — never the secret. */
+  keyId: string;
+  mode: "test" | "live";
+  razorpayOrderId: string;
+  /** Exactly the stored order total, in paise. */
+  amountPaise: number;
+  currency: "INR";
+  orderId: string;
+  attempt: number;
+  /** When the stock hold ends (ISO); Checkout closes itself before then. */
+  reservedUntil: string;
+  timeoutSeconds: number;
+  prefill: { name: string; email: string; contact: string };
+}
+
+/** GET /api/v1/payments/:id/status */
+export interface PaymentStatusView {
+  orderId: string;
+  status: StoreOrderStatus;
+  paymentState: NonNullable<StoreOrder["paymentState"]>;
+  reservedUntil: string | null;
+  /** Payment can be started (or retried) now. */
+  canPay: boolean;
+  attempts: { attempt: number; status: string; createdAt: string; failure: string | null }[];
 }
 
 /** POST /api/v1/checkout/orders response. */

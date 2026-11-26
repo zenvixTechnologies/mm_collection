@@ -21,6 +21,14 @@ export const API_ERROR_CODES = [
   "PRICE_CHANGED",
   /** Checkout: the coupon can't be used for this order. */
   "COUPON_INVALID",
+  /** Payment: the order's stock hold has run out — a new order is needed. */
+  "ORDER_EXPIRED",
+  /** Payment: an earlier payment for this order is still being processed. */
+  "PAYMENT_IN_PROGRESS",
+  /** Payment: the order is already paid. */
+  "ALREADY_PAID",
+  /** Payment: the payment couldn't be verified (bad signature, wrong order, amount or currency). */
+  "PAYMENT_INVALID",
   "PAYLOAD_TOO_LARGE",
   "UNSUPPORTED_MEDIA_TYPE",
   "RATE_LIMITED",

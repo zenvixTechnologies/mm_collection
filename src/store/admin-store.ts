@@ -36,9 +36,10 @@ import { rememberImages } from "@/lib/admin-upload";
  * ADMIN STATE. Every admin screen reads and writes through this store.
  *
  * Catalogue data — products, categories, inventory and stock history — is loaded from and saved
- * to the API (MongoDB). Modules not yet connected to the backend (orders, customers, payments,
- * coupons, homepage, settings) still start from the sample data in src/data/admin and keep
- * changes in memory.
+ * to the API (MongoDB) here. Customers, orders, payments, coupons & offers, homepage and settings
+ * screens load their data straight from the API (useAdminQuery) and no longer use this store.
+ * The sample `orders`/`customers`/`notifications`/`activity` below only feed the dashboard
+ * overview, which isn't connected to the backend yet.
  */
 
 let idSeq = 0;

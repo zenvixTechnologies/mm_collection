@@ -26,7 +26,9 @@ export interface RazorpayOptions {
   notes?: Record<string, string>;
   theme?: { color?: string };
   config?: unknown;
-  modal?: { ondismiss?: () => void; confirm_close?: boolean };
+  /** Seconds until Checkout closes itself (set to end before the stock hold does). */
+  timeout?: number;
+  modal?: { ondismiss?: () => void; confirm_close?: boolean; escape?: boolean };
   handler: (res: RazorpaySuccess) => void;
 }
 
