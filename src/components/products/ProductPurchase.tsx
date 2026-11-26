@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Info, RotateCcw, ShieldCheck, ShoppingBag, Truck, Zap } from "lucide-react";
+import { Check, Info, Loader2, RotateCcw, ShieldCheck, ShoppingBag, Truck, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Product } from "@/types";
 import { getAudience } from "@/data/audiences";
@@ -35,6 +35,9 @@ export function ProductPurchase({ product }: { product: Product }) {
   const revealOptions = () => {
     if (p.soldOut) return;
     document.getElementById("pdp-variants")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  const add = async (opts?: { openDrawer?: boolean }) => {
+    if ((await p.addToCart(opts)) === "options") revealOptions();
   };
 
   return (
@@ -94,7 +97,7 @@ export function ProductPurchase({ product }: { product: Product }) {
 
       {/* Desktop / tablet actions */}
       <div className="mt-7 hidden gap-3 sm:flex">
-        <AddButton onClick={() => p.addToCart({ openDrawer: true }) || revealOptions()} added={p.justAdded} disabled={p.soldOut} />
+        <AddButton onClick={() => void add({ openDrawer: true })} added={p.justAdded} adding={p.adding} disabled={p.soldOut} />
         <button type="button" onClick={() => p.buyNow() || revealOptions()} disabled={p.soldOut} className="btn-accent min-h-13 flex-1 text-[15px]">
           <Zap size={18} /> Buy Now
         </button>
@@ -150,7 +153,7 @@ export function ProductPurchase({ product }: { product: Product }) {
               </p>
             )}
           </div>
-          <AddButton onClick={() => p.addToCart() || revealOptions()} added={p.justAdded} disabled={p.soldOut} compact />
+          <AddButton onClick={() => void add()} added={p.justAdded} adding={p.adding} disabled={p.soldOut} compact />
           <button type="button" onClick={() => p.buyNow() || revealOptions()} disabled={p.soldOut} className="btn-accent min-h-12 flex-1 px-3">
             Buy Now
           </button>
@@ -162,26 +165,39 @@ export function ProductPurchase({ product }: { product: Product }) {
   );
 }
 
-function AddButton({ onClick, added, disabled, compact }: { onClick: () => void; added: boolean; disabled: boolean; compact?: boolean }) {
+function AddButton({
+  onClick,
+  added,
+  adding,
+  disabled,
+  compact,
+}: {
+  onClick: () => void;
+  added: boolean;
+  adding: boolean;
+  disabled: boolean;
+  compact?: boolean;
+}) {
   return (
     <motion.button
       type="button"
       onClick={onClick}
-      disabled={disabled}
+      disabled={disabled || adding}
+      aria-busy={adding || undefined}
       whileTap={{ scale: 0.97 }}
       className={compact ? "btn-primary min-h-12 flex-1 px-3" : "btn-primary min-h-13 flex-1 text-[15px]"}
     >
       <AnimatePresence mode="wait" initial={false}>
         <motion.span
-          key={added ? "added" : "add"}
+          key={added ? "added" : adding ? "adding" : "add"}
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.15 }}
           className="flex items-center gap-2"
         >
-          {added ? <Check size={18} /> : !compact && <ShoppingBag size={18} />}
-          {disabled ? "Sold Out" : added ? "Added!" : "Add to Bag"}
+          {adding ? <Loader2 size={18} className="animate-spin" /> : added ? <Check size={18} /> : !compact && <ShoppingBag size={18} />}
+          {disabled ? "Sold Out" : adding ? "Adding…" : added ? "Added!" : "Add to Bag"}
         </motion.span>
       </AnimatePresence>
     </motion.button>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { AnimatePresence } from "framer-motion";
-import { ArrowLeft, Lock, ShoppingBag } from "lucide-react";
+import { ArrowLeft, Lock, RotateCw, ShoppingBag } from "lucide-react";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { calculateTotals } from "@/lib/pricing";
 import { formatPrice } from "@/lib/utils";
@@ -18,25 +18,34 @@ export function CartView() {
   const hydrated = useHydrated();
   const items = useCartStore((s) => s.items);
   const couponCode = useCartStore((s) => s.couponCode);
+  const status = useCartStore((s) => s.status);
+  const loadError = useCartStore((s) => s.error);
   const totals = calculateTotals(items, couponCode);
+  const loading = !hydrated || status === "idle" || status === "loading";
 
   return (
     <div className="container-page pt-6 lg:pt-8">
       <Breadcrumbs items={[{ label: "Shopping Bag" }]} />
       <h1 className="mt-4 font-display text-4xl font-semibold sm:text-5xl">
         Shopping Bag
-        {hydrated && totals.itemCount > 0 && (
+        {!loading && totals.itemCount > 0 && (
           <span className="ml-3 align-middle font-sans text-base font-normal text-muted">
             {totals.itemCount} item{totals.itemCount === 1 ? "" : "s"}
           </span>
         )}
       </h1>
 
-      {!hydrated ? (
+      {loading ? (
         <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_380px]">
           <LineSkeleton rows={2} />
           <div className="skeleton h-80 rounded-2xl" />
         </div>
+      ) : status === "error" ? (
+        <EmptyState icon={<ShoppingBag size={40} />} title="We couldn't load your bag" description={loadError ?? "Please try again."}>
+          <button type="button" onClick={() => void useCartStore.getState().sync()} className="btn-primary mt-7">
+            <RotateCw size={16} /> Try again
+          </button>
+        </EmptyState>
       ) : items.length === 0 ? (
         <EmptyState
           icon={<ShoppingBag size={40} />}

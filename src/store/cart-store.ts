@@ -2,102 +2,212 @@
 
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { CartItem, Product, Size } from "@/types";
-import { cartKey } from "@/lib/utils";
+import { MAX_LINE_QUANTITY, type CartItem, type CartSnapshot, type Product, type Size } from "@/types";
+import { ApiError, errorMessage, type Method } from "@/lib/api-client";
+import { customerApi } from "@/lib/customer-api";
 import { validateCoupon, type CouponCheck } from "@/lib/pricing";
+import { toast } from "@/store/ui-store";
+
+/**
+ * The shopping bag. The server (/api/v1/cart) is the source of truth for every line, price and
+ * stock figure — guests included, through an HttpOnly guest cookie. This store mirrors the last
+ * server response for the UI, applies quantity changes optimistically, and reconciles with the
+ * server's answer. Only the coupon code is kept in the browser (coupons are checked again,
+ * server-side, at checkout).
+ */
 
 export type AddResult = { ok: true; quantity: number } | { ok: false; error: string };
+export type CartStatus = "idle" | "loading" | "ready" | "error";
 
 interface CartState {
   items: CartItem[];
   couponCode: string | null;
-  addItem: (product: Product, size: Size | null, color: string | null, quantity?: number) => AddResult;
-  updateQuantity: (key: string, quantity: number) => AddResult;
-  removeItem: (key: string) => void;
-  clear: () => void;
+  /** idle → not loaded yet; loading → first load in flight; ready; error → couldn't load. */
+  status: CartStatus;
+  error: string | null;
+  /** Load the bag ("load"), or merge this browser's guest bag / saved bag into it ("merge"). */
+  sync: (mode?: "load" | "merge") => Promise<void>;
+  addItem: (product: Product, size: Size | null, color: string | null, quantity?: number) => Promise<AddResult>;
+  updateQuantity: (key: string, quantity: number) => Promise<AddResult>;
+  removeItem: (key: string) => Promise<boolean>;
+  clear: () => Promise<void>;
   applyCoupon: (code: string, subtotal: number) => CouponCheck;
   removeCoupon: () => void;
 }
 
-/** Units of this product already in the cart across every size/colour variant. */
-function quantityOfProduct(items: CartItem[], productId: string, exceptKey?: string) {
-  return items
-    .filter((i) => i.productId === productId && i.key !== exceptKey)
-    .reduce((n, i) => n + i.quantity, 0);
+/* ---------- One-time import of bags saved in the browser before bags lived on the server ---------- */
+
+const IMPORT_KEY = "mm-cart-import";
+
+interface ImportLine {
+  productId: string;
+  size: string | null;
+  color: string | null;
+  quantity: number;
 }
+
+function stashLegacyLines(items: unknown) {
+  if (!Array.isArray(items) || !items.length) return;
+  const lines: ImportLine[] = items
+    .filter((i): i is CartItem => !!i && typeof i === "object" && typeof (i as CartItem).productId === "string")
+    .slice(0, 50)
+    .map((i) => ({
+      productId: i.productId,
+      size: i.size ?? null,
+      color: i.color ?? null,
+      quantity: Math.max(1, Math.min(MAX_LINE_QUANTITY, Math.floor(Number(i.quantity)) || 1)),
+    }));
+  try {
+    if (lines.length) localStorage.setItem(IMPORT_KEY, JSON.stringify(lines));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+function readImport(): ImportLine[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(IMPORT_KEY) ?? "[]");
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+/* ---------- API plumbing ---------- */
+
+/**
+ * customerApi refreshes an expired customer session itself. If that fails the session cookies
+ * are cleared, so one retry continues as a guest instead of showing an error.
+ */
+async function call<T>(path: string, method: Method = "GET", body?: unknown) {
+  try {
+    return await customerApi<T>(path, { method, body });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) return customerApi<T>(path, { method, body });
+    throw err;
+  }
+}
+
+/** Every request gets a number; only the newest response may overwrite the bag. */
+let seq = 0;
 
 export const useCartStore = create<CartState>()(
   persist(
-    (set, get) => ({
-      items: [],
-      couponCode: null,
+    (set, get) => {
+      const apply = (id: number, snap: CartSnapshot, { notify = true } = {}) => {
+        if (notify) snap.notices.forEach((n) => toast.info(n));
+        if (id === seq) set({ items: snap.items, status: "ready", error: null });
+      };
 
-      addItem: (product, size, color, quantity = 1) => {
-        if (product.stock <= 0) return { ok: false, error: "Sorry, this item is out of stock." };
-        const items = get().items;
-        const key = cartKey(product.id, size, color);
-        const inCart = quantityOfProduct(items, product.id);
-        const available = product.stock - inCart;
-        if (available <= 0) {
-          return { ok: false, error: `You already have all ${product.stock} available units in your bag.` };
-        }
-        const qty = Math.min(quantity, available);
-        const existing = items.find((i) => i.key === key);
-        if (existing) {
-          set({ items: items.map((i) => (i.key === key ? { ...i, quantity: i.quantity + qty } : i)) });
-        } else {
-          set({
-            items: [
-              ...items,
-              {
-                key,
-                productId: product.id,
-                slug: product.slug,
-                name: product.name,
-                image: product.images[0],
-                price: product.price,
-                originalPrice: product.originalPrice,
-                size,
-                color,
-                quantity: qty,
-                stock: product.stock,
-                audience: product.audienceCategory,
-              },
-            ],
-          });
-        }
-        return { ok: true, quantity: qty };
+      /** After a failed change, show what the server really has. */
+      const resync = () => void get().sync("load");
+
+      return {
+        items: [],
+        couponCode: null,
+        status: "idle",
+        error: null,
+
+        sync: async (mode = "load") => {
+          const id = ++seq;
+          if (get().status !== "ready") set({ status: "loading", error: null });
+          try {
+            const pending = readImport();
+            const { data } =
+              mode === "merge" || pending.length
+                ? await call<CartSnapshot>("/cart/merge", "POST", { items: pending })
+                : await call<CartSnapshot>("/cart");
+            if (pending.length) localStorage.removeItem(IMPORT_KEY);
+            apply(id, data);
+          } catch (err) {
+            if (id === seq) set({ status: get().status === "ready" ? "ready" : "error", error: errorMessage(err) });
+          }
+        },
+
+        addItem: async (product, size, color, quantity = 1) => {
+          if (product.stock <= 0) return { ok: false, error: "Sorry, this item is out of stock." };
+          const id = ++seq;
+          try {
+            const { data } = await call<CartSnapshot & { added: number }>("/cart/items", "POST", {
+              productId: product.id,
+              size,
+              color,
+              quantity,
+            });
+            apply(id, data);
+            return { ok: true, quantity: data.added };
+          } catch (err) {
+            if (id === seq) resync();
+            return { ok: false, error: errorMessage(err) };
+          }
+        },
+
+        updateQuantity: async (key, quantity) => {
+          if (quantity < 1) return (await get().removeItem(key)) ? { ok: true, quantity: 0 } : { ok: false, error: "Couldn't remove the item." };
+          const line = get().items.find((i) => i.key === key);
+          if (!line) return { ok: false, error: "Item not found in bag." };
+          const id = ++seq;
+          set({ items: get().items.map((i) => (i.key === key ? { ...i, quantity } : i)) });
+          try {
+            const { data } = await call<CartSnapshot>(`/cart/items/${encodeURIComponent(key)}`, "PATCH", { quantity });
+            apply(id, data);
+            return { ok: true, quantity };
+          } catch (err) {
+            if (id === seq) resync();
+            return { ok: false, error: errorMessage(err) };
+          }
+        },
+
+        removeItem: async (key) => {
+          const id = ++seq;
+          set({ items: get().items.filter((i) => i.key !== key) });
+          try {
+            const { data } = await call<CartSnapshot>(`/cart/items/${encodeURIComponent(key)}`, "DELETE");
+            apply(id, data);
+            return true;
+          } catch (err) {
+            // Already gone (another tab removed it) is fine.
+            if (err instanceof ApiError && err.status === 404) {
+              if (id === seq) resync();
+              return true;
+            }
+            if (id === seq) resync();
+            toast.error(errorMessage(err));
+            return false;
+          }
+        },
+
+        clear: async () => {
+          const id = ++seq;
+          set({ items: [], couponCode: null });
+          try {
+            apply(id, (await call<CartSnapshot>("/cart", "DELETE")).data, { notify: false });
+          } catch {
+            if (id === seq) resync();
+          }
+        },
+
+        applyCoupon: (code, subtotal) => {
+          const result = validateCoupon(code, subtotal);
+          if (result.ok) set({ couponCode: result.coupon.code });
+          return result;
+        },
+
+        removeCoupon: () => set({ couponCode: null }),
+      };
+    },
+    {
+      name: "mm-cart",
+      version: 1,
+      storage: createJSONStorage(() => localStorage),
+      // Bag lines live on the server; only the chosen coupon stays in the browser.
+      partialize: (s) => ({ couponCode: s.couponCode }),
+      migrate: (persisted, version) => {
+        const old = (persisted ?? {}) as { items?: unknown; couponCode?: string | null };
+        // v0 kept the whole bag in localStorage — hand it to the server once, then forget it.
+        if (version < 1) stashLegacyLines(old.items);
+        return { couponCode: old.couponCode ?? null } as CartState;
       },
-
-      updateQuantity: (key, quantity) => {
-        const items = get().items;
-        const line = items.find((i) => i.key === key);
-        if (!line) return { ok: false, error: "Item not found in bag." };
-        if (quantity < 1) {
-          set({ items: items.filter((i) => i.key !== key) });
-          return { ok: true, quantity: 0 };
-        }
-        const maxForLine = line.stock - quantityOfProduct(items, line.productId, key);
-        if (quantity > maxForLine) {
-          set({ items: items.map((i) => (i.key === key ? { ...i, quantity: maxForLine } : i)) });
-          return { ok: false, error: `Only ${line.stock} unit${line.stock === 1 ? "" : "s"} in stock.` };
-        }
-        set({ items: items.map((i) => (i.key === key ? { ...i, quantity } : i)) });
-        return { ok: true, quantity };
-      },
-
-      removeItem: (key) => set({ items: get().items.filter((i) => i.key !== key) }),
-
-      clear: () => set({ items: [], couponCode: null }),
-
-      applyCoupon: (code, subtotal) => {
-        const result = validateCoupon(code, subtotal);
-        if (result.ok) set({ couponCode: result.coupon.code });
-        return result;
-      },
-
-      removeCoupon: () => set({ couponCode: null }),
-    }),
-    { name: "mm-cart", storage: createJSONStorage(() => localStorage) },
+    },
   ),
 );
