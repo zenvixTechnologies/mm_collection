@@ -4,11 +4,11 @@ import type { z } from "zod";
 import type { AdminOrder, AdminOrderStatus } from "@/types/admin";
 import { connectToDatabase } from "@/server/db/connect";
 import { withTransaction } from "@/server/db/transaction";
-import { AppError, badRequest, conflict, notFound } from "@/server/http/errors";
+import { AppError, conflict, notFound } from "@/server/http/errors";
+import { InventoryMovement } from "@/server/models/inventory-movement.model";
 import { Order } from "@/server/models/order.model";
 import { Payment } from "@/server/models/payment.model";
-import { StoreSettings } from "@/server/models/store-settings.model";
-import type { bulkOrderStatusBody, orderListQuery, orderStatusBody, trackingBody } from "@/server/validation/admin-sales";
+import type { bulkOrderStatusBody, orderListQuery, orderStatusBody } from "@/server/validation/admin-sales";
 import { audit, type AuditActor } from "./audit.service";
 import { DB_STATUS_FOR, FULFILMENT_NEXT, PAID_STATUSES, dateRange, escapeRegex, pageOf, toAdminOrder, type AdminOrderDoc, type DbOrderStatus } from "./admin-sales.shared";
 import { releaseUnpaidOrder } from "./order.service";
@@ -79,12 +79,9 @@ async function loadOrder(orderNumber: string) {
 export async function getOrder(orderNumber: string) {
   await connectToDatabase();
   const o = await loadOrder(orderNumber);
-  const [attempts, settings] = await Promise.all([
-    Payment.find({ order: o._id }, { attempt: 1, status: 1, method: 1, methodDetail: 1, razorpayOrderId: 1, razorpayPaymentId: 1, refundedPaise: 1, createdAt: 1 })
-      .sort({ attempt: -1 })
-      .lean(),
-    StoreSettings.findOne({ key: "store" }, { "shipping.couriers": 1 }).lean<{ shipping?: { couriers?: { name: string; trackingUrlTemplate?: string; enabled?: boolean }[] } }>(),
-  ]);
+  const attempts = await Payment.find({ order: o._id }, { attempt: 1, status: 1, method: 1, methodDetail: 1, razorpayOrderId: 1, razorpayPaymentId: 1, refundedPaise: 1, createdAt: 1 })
+    .sort({ attempt: -1 })
+    .lean();
   const paid = attempts.find((a) => a.status === "captured" || a.status === "refunded" || a.status === "partially_refunded");
   return {
     order: toAdminOrder(o),
@@ -96,9 +93,6 @@ export async function getOrder(orderNumber: string) {
       razorpayPaymentId: paid?.razorpayPaymentId ?? null,
       attempts: attempts.length,
     },
-    couriers: (settings?.shipping?.couriers ?? [])
-      .filter((c) => c.enabled !== false)
-      .map((c) => ({ name: c.name, trackingUrlTemplate: c.trackingUrlTemplate ?? "" })),
   };
 }
 
@@ -107,9 +101,42 @@ export async function getOrder(orderNumber: string) {
 const isPaid = (o: Pick<AdminOrderDoc, "paymentStatus">) => o.paymentStatus === "captured" || o.paymentStatus === "partially_refunded";
 
 /**
+ * The one-way status move for a paid order, used by staff and by customer cancellation. It only
+ * applies while the order still has status `from`. Cancelling returns the units to stock.
+ * `extra` is saved in the same atomic update.
+ */
+export async function applyStatusMove(order: AdminOrderDoc, from: DbOrderStatus, target: DbOrderStatus, by: StockActor, note: string, extra: Record<string, unknown> = {}) {
+  await withTransaction(async (session) => {
+    const now = new Date();
+    const res = await Order.updateOne(
+      { _id: order._id, status: from },
+      {
+        $set: { status: target, ...extra },
+        $push: { statusHistory: { status: target, from, at: now, by, note } },
+      },
+      { session },
+    );
+    if (res.modifiedCount !== 1) throw conflict("This order was updated by someone else. Reload and try again.");
+    // The ledger also covers orders paid late before that sale cleared `stockReleased`. This runs
+    // only after the one-way status move above succeeded, so units are returned at most once.
+    if (target === "cancelled" && (!order.stockReleased || (await InventoryMovement.exists({ order: order._id, type: "sale" }).session(session)))) {
+      const lines = new Map<string, { productId: Types.ObjectId; quantity: number }>();
+      for (const i of order.items) {
+        const cur = lines.get(i.variantSku);
+        if (cur) cur.quantity += i.quantity;
+        else lines.set(i.variantSku, { productId: i.product, quantity: i.quantity });
+      }
+      for (const [sku, l] of lines) {
+        await restockVariant(session, { productId: l.productId, sku, quantity: l.quantity, orderId: order._id, actor: by, note: "Order cancelled before shipping — units back in stock" });
+      }
+    }
+  });
+}
+
+/**
  * Moves an order one step along fulfilment. Rules (server-side, whatever the UI offers):
- * forward only; only paid orders move forward; "Shipped" needs tracking; cancel only before it
- * ships. Cancelling an unpaid order first asks Razorpay (never cancel a paid or in-flight payment)
+ * forward only; only paid orders move forward; cancel only before it ships. No courier or
+ * shipment details are needed for any status. Cancelling an unpaid order first asks Razorpay (never cancel a paid or in-flight payment)
  * and then releases its reserved stock and coupon use. Cancelling a paid order returns its units to
  * stock (ledger "return") — the refund is a separate, gateway-confirmed step in Payments.
  */
@@ -133,30 +160,7 @@ export async function updateOrderStatus(orderNumber: string, input: z.output<typ
     if (!done) throw conflict("This order changed meanwhile. Reload and try again.");
   } else {
     if (target !== "cancelled" && !isPaid(order)) throw conflict("Only paid orders can be moved forward.");
-    if (target === "shipped" && !order.tracking?.awb) throw badRequest("Add the courier and tracking number before marking the order as shipped.");
-    await withTransaction(async (session) => {
-      const now = new Date();
-      const res = await Order.updateOne(
-        { _id: order._id, status: from },
-        {
-          $set: { status: target, ...(target === "shipped" && !order.tracking?.shippedAt ? { "tracking.shippedAt": now } : {}) },
-          $push: { statusHistory: { status: target, at: now, by, note: input.note } },
-        },
-        { session },
-      );
-      if (res.modifiedCount !== 1) throw conflict("This order was updated by someone else. Reload and try again.");
-      if (target === "cancelled" && !order.stockReleased) {
-        const lines = new Map<string, { productId: Types.ObjectId; quantity: number }>();
-        for (const i of order.items) {
-          const cur = lines.get(i.variantSku);
-          if (cur) cur.quantity += i.quantity;
-          else lines.set(i.variantSku, { productId: i.product, quantity: i.quantity });
-        }
-        for (const [sku, l] of lines) {
-          await restockVariant(session, { productId: l.productId, sku, quantity: l.quantity, orderId: order._id, actor: by, note: "Order cancelled before shipping — units back in stock" });
-        }
-      }
-    });
+    await applyStatusMove(order, from, target, by, input.note);
   }
 
   await audit(actor, "order.status", { type: "order", id: orderNumber, label: orderNumber }, { status: { from, to: target }, note: input.note || undefined });
@@ -178,27 +182,7 @@ export async function bulkUpdateStatus(input: z.output<typeof bulkOrderStatusBod
   return { updated, skipped };
 }
 
-/* ---------- Tracking & notes ---------- */
-
-export async function setTracking(orderNumber: string, input: z.output<typeof trackingBody>, actor: AuditActor) {
-  await connectToDatabase();
-  const order = await loadOrder(orderNumber);
-  if (!isPaid(order) || ["cancelled", "delivered", "expired", "payment_failed", "pending_payment"].includes(order.status)) {
-    throw conflict("Tracking can only be added to paid orders that haven't been delivered or cancelled.");
-  }
-  const tracking = {
-    courier: input.courier,
-    awb: input.awb.toUpperCase(),
-    url: input.url || "",
-    shippedAt: order.tracking?.shippedAt ?? null,
-  };
-  await Order.updateOne({ _id: order._id }, { $set: { tracking } });
-  await audit(actor, "order.tracking", { type: "order", id: orderNumber, label: orderNumber }, {
-    from: order.tracking?.awb ? { courier: order.tracking.courier, awb: order.tracking.awb } : null,
-    to: { courier: tracking.courier, awb: tracking.awb },
-  });
-  return getOrder(orderNumber);
-}
+/* ---------- Notes ---------- */
 
 export async function addOrderNote(orderNumber: string, text: string, actor: AuditActor) {
   await connectToDatabase();

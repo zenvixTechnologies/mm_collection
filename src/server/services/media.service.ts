@@ -16,10 +16,12 @@ import { Category } from "@/server/models/category.model";
 import { HomepageBanner } from "@/server/models/homepage-banner.model";
 import { MediaAsset } from "@/server/models/media-asset.model";
 import { Product } from "@/server/models/product.model";
+import { Review } from "@/server/models/review.model";
 import { logger, serializeError } from "@/server/utils/logger";
 import { audit, type AuditActor } from "./audit.service";
 
 export type UploadPurpose = "product" | "category" | "banner" | "logo";
+// (Customer review photos have their own, stricter flow in review-image.service.ts.)
 
 const FOLDERS: Record<UploadPurpose, string> = {
   product: "products",
@@ -86,14 +88,15 @@ export async function confirmUpload(publicId: string, actor: AuditActor) {
   return { url: r.secure_url, publicId: r.public_id, width: r.width, height: r.height, format: r.format, bytes: r.bytes };
 }
 
-/** True if any product, category or banner still uses this image. */
+/** True if any product, category, banner or review still uses this image. */
 async function isReferenced(publicId: string) {
-  const [p, c, b] = await Promise.all([
-    Product.exists({ "images.publicId": publicId }),
+  const [p, c, b, r] = await Promise.all([
+    Product.exists({ $or: [{ "images.publicId": publicId }, { "colorImages.images.publicId": publicId }] }),
     Category.exists({ "image.publicId": publicId }),
     HomepageBanner.exists({ "image.publicId": publicId }),
+    Review.exists({ "images.publicId": publicId }),
   ]);
-  return Boolean(p || c || b);
+  return Boolean(p || c || b || r);
 }
 
 /**

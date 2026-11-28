@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { MAX_COLOR_IMAGES } from "@/lib/gallery";
 import { imageInput } from "@/server/catalog/images";
 import { AUDIENCES } from "@/server/models/_shared";
 import { paise, pagination, queryBoolean, slug } from "./common";
@@ -37,6 +38,11 @@ export const productBody = z
     shortDescription: text(300).default(""),
     description: text(5000).default(""),
     images: z.array(imageInput).max(12).default([]),
+    /** Photos per colour. Omit to leave the saved colour photos as they are. */
+    colorImages: z
+      .array(z.object({ color: text(40).min(1), images: z.array(imageInput).max(MAX_COLOR_IMAGES, `A colour can have up to ${MAX_COLOR_IMAGES} photos.`) }))
+      .max(40)
+      .optional(),
     pricePaise: paise.min(100, "Enter the selling price."),
     mrpPaise: paise.min(100, "Enter the MRP."),
     variants: z.array(variantInput).min(1, "Add at least one variant.").max(200),
@@ -53,6 +59,23 @@ export const productBody = z
     if (p.status === "active" && !p.images.length) ctx.addIssue({ code: "custom", path: ["images"], message: "Add at least one image before publishing." });
     const keys = p.variants.map((v) => `${v.size ?? ""}|${v.color?.name.toLowerCase() ?? ""}`);
     if (new Set(keys).size !== keys.length) ctx.addIssue({ code: "custom", path: ["variants"], message: "Each size and colour combination can only appear once." });
+
+    // Every colour gallery belongs to one of this product's colours, and no photo to two colours.
+    const offered = new Set(p.variants.flatMap((v) => (v.color ? [v.color.name.toLowerCase()] : [])));
+    const seenColors = new Set<string>();
+    const owner = new Map<string, string>();
+    (p.colorImages ?? []).forEach((gallery, i) => {
+      const name = gallery.color.toLowerCase();
+      const fail = (message: string) => ctx.addIssue({ code: "custom", path: ["colorImages", i], message });
+      if (!offered.has(name)) fail(`"${gallery.color}" isn't one of this product's colours.`);
+      if (seenColors.has(name)) fail(`${gallery.color} has two photo lists.`);
+      seenColors.add(name);
+      for (const image of gallery.images) {
+        const other = owner.get(image.url);
+        if (other !== undefined) fail(other === name ? `${gallery.color} has the same photo twice.` : "The same photo can't belong to two colours.");
+        owner.set(image.url, name);
+      }
+    });
   });
 
 export type ProductBody = z.output<typeof productBody>;

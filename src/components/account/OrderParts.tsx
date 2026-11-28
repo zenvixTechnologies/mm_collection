@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Check, CheckCircle2, ClipboardCheck, Home, Package, PackageCheck, Truck } from "lucide-react";
+import { Box, Check, CheckCircle2, ClipboardCheck, Home, Package, PackageCheck, Truck } from "lucide-react";
 import type { OrderStatus, PaymentMethod, StoreOrder, StoreOrderStatus } from "@/types";
-import { ORDER_STATUSES } from "@/types";
+import { timelineSteps } from "@/lib/shipment";
 import { cn, formatDate, formatPrice } from "@/lib/utils";
 import { ProductImage } from "@/components/ui/ProductImage";
 
@@ -15,7 +15,15 @@ export const PAYMENT_LABEL: Record<PaymentMethod, string> = {
   netbanking: "Net Banking",
 };
 
-const STATUS_ICON = [ClipboardCheck, CheckCircle2, Package, Truck, Home, PackageCheck];
+const STATUS_ICON: Record<OrderStatus | "Packed", typeof Check> = {
+  "Order Placed": ClipboardCheck,
+  Confirmed: CheckCircle2,
+  Processing: Package,
+  Packed: Box,
+  Shipped: Truck,
+  "Out for Delivery": Home,
+  Delivered: PackageCheck,
+};
 
 export function StatusBadge({ status }: { status: StoreOrderStatus }) {
   const delivered = status === "Delivered";
@@ -48,17 +56,18 @@ export function StatusBadge({ status }: { status: StoreOrderStatus }) {
 /** Visual order-progress timeline (vertical on mobile, horizontal on desktop). */
 export function OrderTimeline({ order }: { order: StoreOrder }) {
   // Orders waiting for payment, or that ended unpaid, haven't reached the first step yet.
-  const current = ORDER_STATUSES.indexOf(order.status as OrderStatus);
+  const steps = timelineSteps(order);
+  const current = steps.indexOf(order.status);
   return (
-    <ol className="relative grid gap-0 md:grid-cols-6" aria-label="Order progress">
-      {ORDER_STATUSES.map((s, i) => {
+    <ol className={cn("relative grid gap-0", steps.length === 7 ? "md:grid-cols-7" : "md:grid-cols-6")} aria-label="Order progress">
+      {steps.map((s, i) => {
         const done = i <= current;
-        const Icon = STATUS_ICON[i];
+        const Icon = STATUS_ICON[s as keyof typeof STATUS_ICON];
         const at = order.history[s];
         return (
           <li key={s} className="relative flex gap-4 pb-7 last:pb-0 md:flex-col md:items-center md:gap-3 md:pb-0 md:text-center">
             {/* connector */}
-            {i < ORDER_STATUSES.length - 1 && (
+            {i < steps.length - 1 && (
               <>
                 <span className="absolute top-10 bottom-0 left-5 w-0.5 -translate-x-1/2 bg-line md:top-5 md:right-[-50%] md:bottom-auto md:left-1/2 md:h-0.5 md:w-auto md:translate-x-0" aria-hidden />
                 <motion.span
@@ -95,10 +104,47 @@ export function OrderTimeline({ order }: { order: StoreOrder }) {
   );
 }
 
-export function OrderItems({ order }: { order: StoreOrder }) {
+/** The order's current status and every status it has reached. */
+export function OrderUpdates({ order }: { order: StoreOrder }) {
+  const updates = (Object.entries(order.history) as [StoreOrderStatus, string][]).sort(([, a], [, b]) => Date.parse(b) - Date.parse(a));
+  const facts: [string, string][] = [
+    ["Order number", order.id],
+    ["Current status", order.status],
+    ...(order.lastUpdatedAt ? ([["Last updated", formatDate(order.lastUpdatedAt, true)]] as [string, string][]) : []),
+  ];
+  return (
+    <div className="text-sm">
+      <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        {facts.map(([label, value]) => (
+          <div key={label} className="min-w-0">
+            <dt className="text-[13px] text-muted">{label}</dt>
+            <dd className="font-medium break-words">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {updates.length > 0 && (
+        <div className="mt-5 border-t border-line pt-4">
+          <h3 className="mb-2 font-semibold">Status history</h3>
+          <ol className="space-y-1.5 text-[13px]" aria-label="Status history">
+            {updates.map(([status, at]) => (
+              <li key={status} className="flex flex-wrap justify-between gap-x-3">
+                <span className="font-medium">{status}</span>
+                <time dateTime={at} className="text-muted">
+                  {formatDate(at, true)}
+                </time>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function OrderItems({ order, itemFooter }: { order: StoreOrder; itemFooter?: (item: StoreOrder["items"][number], index: number) => React.ReactNode }) {
   return (
     <ul className="divide-y divide-line">
-      {order.items.map((it) => (
+      {order.items.map((it, index) => (
         <li key={it.sku ?? `${it.productId}-${it.size}-${it.color}`} className="flex gap-4 py-4 first:pt-0 last:pb-0">
           <Link href={`/product/${it.slug}`} className="relative h-24 w-[76px] shrink-0 overflow-hidden rounded-lg bg-sand">
             <ProductImage src={it.image} alt={it.name} fill sizes="76px" />
@@ -111,6 +157,7 @@ export function OrderItems({ order }: { order: StoreOrder }) {
               {[it.size && `Size ${it.size}`, it.color && `Colour ${it.color}`, `Qty ${it.quantity}`].filter(Boolean).join(" · ")}
             </p>
             <p className="mt-1 text-[13px] text-muted">{formatPrice(it.price)} each</p>
+            {itemFooter?.(it, index)}
           </div>
           <p className="text-sm font-semibold">{formatPrice(it.price * it.quantity)}</p>
         </li>

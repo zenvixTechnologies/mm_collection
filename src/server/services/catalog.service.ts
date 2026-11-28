@@ -3,7 +3,10 @@ import { isValidObjectId, type Model, type QueryFilter, type SortOrder, type Typ
 import { unstable_cache } from "next/cache";
 import { cache } from "react";
 import { createCatalog, type CatalogSnapshot } from "@/lib/catalog-query";
+import type { ListingFacets } from "@/lib/listing";
+import { availableVariant, listingFacets, searchConditions } from "@/server/catalog/listing-filter";
 import type { Category, Product } from "@/types";
+import type { PaginationMeta } from "@/types/api";
 import {
   CATEGORY_PUBLIC_PROJECTION,
   PRODUCT_PUBLIC_PROJECTION,
@@ -62,7 +65,7 @@ export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
  * change calls revalidateTag(CATALOG_TAG). Stock shown here may lag slightly; checkout always
  * re-reads live stock from the database.
  */
-export const getCatalogSnapshot = unstable_cache(loadCatalogSnapshot, ["catalog-snapshot-v1"], {
+export const getCatalogSnapshot = unstable_cache(loadCatalogSnapshot, ["catalog-snapshot-v4"], {
   tags: [CATALOG_TAG],
   revalidate: 300,
 });
@@ -79,20 +82,38 @@ const SORTS: Record<NonNullable<ProductListQuery["sort"]>, Record<string, SortOr
   "price-asc": { inStock: -1, pricePaise: 1, _id: 1 },
   "price-desc": { inStock: -1, pricePaise: -1, _id: 1 },
   "best-selling": { inStock: -1, soldCount: -1, _id: 1 },
-  rating: { inStock: -1, "rating.average": -1, "rating.count": -1, _id: 1 },
+  rating: { inStock: -1, "reviewStats.average": -1, "reviewStats.count": -1, _id: 1 },
   relevance: { score: { $meta: "textScore" }, inStock: -1, soldCount: -1 },
 };
 
-export async function listProducts(q: ProductListQuery) {
+/**
+ * The storefront's one product listing: filtering, sorting and pagination all happen in MongoDB.
+ * Choices within a filter are OR-ed; different filters are AND-ed. Size and colour must be met by
+ * one variant that is on sale with units available (stock − reserved), so a sold-out size, or a
+ * size and colour only found on different variants, never matches.
+ */
+export async function listProducts(q: ProductListQuery): Promise<{ items: Product[]; meta: PaginationMeta; facets?: ListingFacets }> {
   await connectToDatabase();
-  const cats = indexCategories(await allCategories());
+  const all = await allCategories();
+  const cats = indexCategories(all);
 
-  const filter: Record<string, unknown> = { ...PUBLIC_PRODUCT };
-  if (q.audience) filter.audience = q.audience;
-  if (q.category) {
-    const id = cats.idOf(q.category);
-    if (!id) return { items: [] as Product[], meta: paginationMeta(q.page, q.limit, 0) };
-    filter.$or = [{ category: id }, { tags: id }];
+  // The listing itself, which the filter options are drawn from.
+  const base: Record<string, unknown> = { ...PUBLIC_PRODUCT };
+  if (q.featured !== undefined) base.featured = q.featured;
+  if (q.newArrival !== undefined) base.newArrival = q.newArrival;
+  if (q.bestSeller !== undefined) base.bestSeller = q.bestSeller;
+  const byAudience: Record<string, unknown> = q.audience ? { audience: q.audience } : {};
+  let byCategory: Record<string, unknown> = {};
+  if (q.category?.length) {
+    // An unknown slug matches nothing.
+    const ids = q.category.map(cats.idOf).filter((id): id is Types.ObjectId => !!id);
+    byCategory = { $or: [{ category: { $in: ids } }, { tags: { $in: ids } }] };
+  }
+
+  const filter: Record<string, unknown> = { ...base, ...byAudience, ...byCategory };
+  if (q.search) {
+    const conditions = searchConditions(q.search, all);
+    if (conditions.length) filter.$and = conditions;
   }
   if (q.q) filter.$text = { $search: q.q };
   if (q.minPrice !== undefined || q.maxPrice !== undefined) {
@@ -103,11 +124,7 @@ export async function listProducts(q: ProductListQuery) {
   }
   if (q.minDiscount !== undefined) filter.discountPercent = { $gte: q.minDiscount };
   if (q.inStock) filter.inStock = true;
-  if (q.featured !== undefined) filter.featured = q.featured;
-  if (q.newArrival !== undefined) filter.newArrival = q.newArrival;
-  if (q.bestSeller !== undefined) filter.bestSeller = q.bestSeller;
-  if (q.sizes?.length) filter["variants.size"] = { $in: q.sizes };
-  if (q.colors?.length) filter["variants.color.name"] = { $in: q.colors };
+  if (q.sizes?.length || q.colors?.length) filter.$expr = availableVariant({ sizes: q.sizes, colors: q.colors });
 
   const sortKey = q.sort ?? (q.q ? "relevance" : "featured");
   const sort = sortKey === "relevance" && !q.q ? SORTS.featured : SORTS[sortKey];
@@ -116,16 +133,21 @@ export async function listProducts(q: ProductListQuery) {
   void _omit;
   const projection = sortKey === "relevance" && q.q ? { ...listFields, score: { $meta: "textScore" } } : listFields;
 
-  const [docs, total] = await Promise.all([
+  const [docs, total, facets] = await Promise.all([
     ProductModel.find(filter as ProductFilter, projection)
       .sort(sort as Record<string, SortOrder>)
       .skip(skipFor(q))
       .limit(q.limit)
       .lean<ProductLean[]>(),
     ProductModel.countDocuments(filter as ProductFilter),
+    q.facets ? listingFacets(base, byAudience, byCategory, cats.slugOf) : undefined,
   ]);
 
-  return { items: docs.map((p) => toStoreProduct(p, cats.slugOf)), meta: paginationMeta(q.page, q.limit, total) };
+  return {
+    items: docs.map((p) => toStoreProduct(p, cats.slugOf)),
+    meta: paginationMeta(q.page, q.limit, total),
+    ...(facets && { facets }),
+  };
 }
 
 /** Product by slug, original ID (p001) or database ID — read fresh from MongoDB. */

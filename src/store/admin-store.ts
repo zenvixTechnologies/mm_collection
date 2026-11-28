@@ -18,7 +18,6 @@ import type {
   InventoryItem,
   PaymentTransaction,
   ProductStatus,
-  ShipmentTracking,
   ShippingSettings,
   StockAdjustment,
   StoreSettings,
@@ -84,7 +83,6 @@ interface AdminActions {
   moveCategory: (id: string, direction: -1 | 1) => Promise<Result>;
   /* orders */
   updateOrderStatus: (id: string, status: AdminOrderStatus) => void;
-  setTracking: (id: string, tracking: ShipmentTracking) => void;
   addOrderNote: (id: string, text: string) => void;
   /* customers */
   updateCustomer: (id: string, patch: Partial<AdminCustomer>) => void;
@@ -101,7 +99,6 @@ interface AdminActions {
   setFeaturedProducts: (ids: string[]) => void;
   toggleSection: (id: string) => void;
   /* settings */
-  updateShipping: (patch: Partial<ShippingSettings>) => void;
   updateSettings: (patch: Partial<StoreSettings>) => void;
   /* notifications */
   markNotificationRead: (id: string) => void;
@@ -122,6 +119,7 @@ export interface ProductPayload {
   shortDescription: string;
   description: string;
   images: AdminImage[];
+  colorImages: { color: string; images: AdminImage[] }[];
   pricePaise: number;
   mrpPaise: number;
   variants: { size: string | null; color: { name: string; hex: string } | null; initialStock?: number; lowStockThreshold: number }[];
@@ -375,11 +373,6 @@ export const useAdminStore = create<AdminData & AdminActions>()((set, get) => {
         ),
         activity: log(`marked ${status.toLowerCase()}`, id, `/mm-hub/orders/${id}`),
       }),
-    setTracking: (id, tracking) =>
-      set({
-        orders: get().orders.map((o) => (o.id === id ? { ...o, tracking } : o)),
-        activity: log("added tracking to", id, `/mm-hub/orders/${id}`),
-      }),
     addOrderNote: (id, text) =>
       set({
         orders: get().orders.map((o) =>
@@ -433,7 +426,6 @@ export const useAdminStore = create<AdminData & AdminActions>()((set, get) => {
     toggleSection: (id) =>
       set({ homepageSections: get().homepageSections.map((s) => (s.id === id ? { ...s, visible: !s.visible } : s)) }),
 
-    updateShipping: (patch) => set({ shipping: { ...get().shipping, ...patch }, activity: log("updated", "shipping settings", "/mm-hub/shipping") }),
     updateSettings: (patch) => set({ settings: { ...get().settings, ...patch }, activity: log("updated", "store settings", "/mm-hub/settings") }),
 
     markNotificationRead: (id) => set({ notifications: get().notifications.map((n) => (n.id === id ? { ...n, read: true } : n)) }),

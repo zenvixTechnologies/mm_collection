@@ -8,6 +8,8 @@ import type { Product } from "@/types";
 import { useCatalog } from "@/components/catalog/CatalogProvider";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { usePurchase } from "@/hooks/use-purchase";
+import { FALLBACK_IMAGE } from "@/data/images";
+import { galleryFor } from "@/lib/gallery";
 import { toast } from "@/store/ui-store";
 import { useWishlistStore } from "@/store/wishlist-store";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
@@ -134,19 +136,22 @@ export function WishlistView() {
 
 function MoveToCart({ product, onDone }: { product: Product; onDone: () => void }) {
   const p = usePurchase(product);
+  const gallery = galleryFor(product, p.color);
+  const photo = gallery.images[0] ?? FALLBACK_IMAGE;
   return (
     <div className="p-5">
       <div className="mb-5 flex gap-3">
         <div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-lg bg-sand">
-          <ProductImage src={product.images[0]} alt={product.name} fill sizes="64px" />
+          <ProductImage key={photo} src={photo} alt={gallery.source === "color" ? `${product.name}, ${p.color}` : product.name} fill sizes="64px" />
         </div>
         <div>
           <p className="font-semibold">{product.name}</p>
           <Price price={product.price} originalPrice={product.originalPrice} discount={product.discount} size="sm" className="mt-1" />
         </div>
       </div>
+      {gallery.notice && <p className="-mt-2 mb-4 text-xs leading-4 text-muted">{gallery.notice}</p>}
       <VariantPicker
-        product={product}
+        product={p.product}
         size={p.size}
         color={p.color}
         onSize={p.setSize}
@@ -157,13 +162,13 @@ function MoveToCart({ product, onDone }: { product: Product; onDone: () => void 
       <button
         type="button"
         className="btn-primary mt-6 w-full"
-        disabled={p.adding}
+        disabled={p.soldOut || p.adding}
         aria-busy={p.adding || undefined}
         onClick={async () => {
           if ((await p.addToCart()) === "added") onDone();
         }}
       >
-        {p.adding ? <Loader2 size={17} className="animate-spin" /> : <ShoppingBag size={17} />} {p.adding ? "Moving…" : "Move to Bag"}
+        {p.adding ? <Loader2 size={17} className="animate-spin" /> : <ShoppingBag size={17} />} {p.soldOut ? "Out of stock" : p.adding ? "Moving…" : "Move to Bag"}
       </button>
     </div>
   );

@@ -56,3 +56,13 @@ export function passwordChangedEmail(name: string) {
     text: `Hi ${first},\n\nThe password for your ${BRAND} account was just changed and other devices were signed out. If this wasn't you, reset your password straight away and contact us.`,
   };
 }
+
+/** An update about an order's cancellation or return, sent to the account holder. */
+export function orderUpdateEmail(name: string, orderNumber: string, title: string, lines: string[], url: string | null) {
+  const first = name.split(" ")[0] || "there";
+  return {
+    subject: `${title} — order ${orderNumber}`,
+    html: layout(title, `<p>Hi ${escape(first)},</p><p>Order <strong>${escape(orderNumber)}</strong></p>${lines.map((l) => `<p>${escape(l)}</p>`).join("")}${url ? button(url, "View your order") : ""}`),
+    text: `Hi ${first},\n\n${title}\nOrder ${orderNumber}\n\n${lines.join("\n")}${url ? `\n\n${url}` : ""}`,
+  };
+}

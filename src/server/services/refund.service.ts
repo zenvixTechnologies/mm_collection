@@ -6,6 +6,7 @@ import { withTransaction } from "@/server/db/transaction";
 import { AppError, badRequest, conflict, notFound } from "@/server/http/errors";
 import { Order } from "@/server/models/order.model";
 import { Payment } from "@/server/models/payment.model";
+import { WebhookEvent } from "@/server/models/webhook-event.model";
 import { logger, serializeError } from "@/server/utils/logger";
 import { audit, type AuditActor } from "./audit.service";
 
@@ -76,7 +77,11 @@ async function recordRefund(paymentId: Types.ObjectId, r: RazorpayRefund, meta: 
       idempotencyKey: (i >= 0 ? refunds[i].idempotencyKey : meta.idempotencyKey) ?? keyOf(r) ?? null,
     };
     if (i >= 0) {
-      if (refunds[i].status === r.status && refunds[i].amountPaise === r.amount) return { changed: false, ...totals(p.amountPaise, refunds) };
+      // Webhooks and API answers can arrive late or out of order: a settled refund never goes back to
+      // "pending", and only a live read from Razorpay (a sync) may turn a processed one into "failed".
+      const stale =
+        (r.status === "pending" && refunds[i].status !== "pending") || (r.status === "failed" && refunds[i].status === "processed" && meta.source !== "sync");
+      if (stale || (refunds[i].status === r.status && refunds[i].amountPaise === r.amount)) return { changed: false, ...totals(p.amountPaise, refunds) };
       refunds[i] = { ...refunds[i], ...row };
       await Payment.updateOne(
         { _id: p._id, "refunds.razorpayRefundId": r.id },
@@ -97,8 +102,10 @@ async function recordRefund(paymentId: Types.ObjectId, r: RazorpayRefund, meta: 
     }
     const t = totals(p.amountPaise, refunds);
     await Payment.updateOne({ _id: p._id }, { $set: { refundedPaise: t.refundedPaise, status: t.status } }, { session });
+    // Only the payment that paid the order changes the order. Refunding an extra (duplicate)
+    // payment is recorded on that payment alone.
     await Order.updateOne(
-      { _id: p.order, paymentStatus: { $in: ["captured", "partially_refunded", "refunded"] } },
+      { _id: p.order, razorpayPaymentId: p.razorpayPaymentId, paymentStatus: { $in: ["captured", "partially_refunded", "refunded"] } },
       { $set: { refundedPaise: t.refundedPaise, paymentStatus: t.status } },
       { session },
     );
@@ -234,4 +241,126 @@ export async function applyRefundWebhook(r: RazorpayRefund) {
   if (checkRefund(r, p)) return "mismatch" as const;
   const result = await recordRefund(p._id, r, { source: "webhook" });
   return result.changed ? ("recorded" as const) : ("unchanged" as const);
+}
+
+/* ---------- Refunds that arrive before their payment ---------- */
+
+/*
+ * A refund webhook can beat the record of its payment. Its verified details are saved on the
+ * webhook event in the same write that claims the event — before the payment is looked up — and
+ * completing a payment looks for saved refunds after its transaction has committed. Each side
+ * writes before it reads the other's record, so at least one of them always sees both. Applying
+ * goes through applyRefundWebhook, which is safe to repeat and never touches stock or coupons.
+ */
+
+export interface StoredRefund {
+  refundId: string;
+  paymentId: string;
+  amountPaise: number;
+  currency: string;
+  status: RazorpayRefund["status"];
+  idempotencyKey?: string | null;
+}
+
+/** The fields to keep from a verified refund event, or null if they couldn't be applied later. */
+export function toStoredRefund(r: RazorpayRefund | undefined): StoredRefund | null {
+  const text = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 100;
+  if (!r || !text(r.id) || !text(r.payment_id) || !text(r.currency)) return null;
+  if (!Number.isSafeInteger(r.amount) || r.amount <= 0 || !["pending", "processed", "failed"].includes(r.status)) return null;
+  const key = keyOf(r);
+  return { refundId: r.id, paymentId: r.payment_id, amountPaise: r.amount, currency: r.currency, status: r.status, idempotencyKey: text(key) ? key : null };
+}
+
+const fromStored = (s: StoredRefund): RazorpayRefund => ({
+  id: s.refundId,
+  payment_id: s.paymentId,
+  amount: s.amountPaise,
+  currency: s.currency,
+  status: s.status,
+  ...(s.idempotencyKey ? { notes: { idempotency_key: s.idempotencyKey } } : {}),
+});
+
+/** An event left "processing" this long was interrupted. */
+export const STALE_EVENT_MS = 5 * 60_000;
+
+/**
+ * Applies every saved refund of a payment that is now on record. Events still being handled are
+ * included, so one whose own lookup ran too early isn't missed. Never throws for a single event:
+ * it stays "deferred" to be tried again, and is counted in `failed`.
+ */
+export async function applyDeferredRefunds(razorpayPaymentId: string, { deadline }: { deadline?: number } = {}) {
+  await connectToDatabase();
+  const events = await WebhookEvent.find(
+    { provider: "razorpay", "refund.paymentId": razorpayPaymentId, status: { $in: ["deferred", "processing", "failed"] } },
+    { refund: 1 },
+  )
+    .sort({ createdAt: 1, _id: 1 })
+    .lean<{ _id: Types.ObjectId; refund: StoredRefund }[]>();
+  let applied = 0;
+  let failed = 0;
+  for (const event of events) {
+    if (deadline !== undefined && Date.now() >= deadline) break;
+    try {
+      const outcome = await applyRefundWebhook(fromStored(event.refund));
+      if (outcome === "unknown_payment") break; // still not on record: keep waiting
+      const payment = await Payment.findOne({ razorpayPaymentId }, { order: 1 }).lean<{ order: Types.ObjectId }>();
+      await WebhookEvent.updateOne(
+        { _id: event._id },
+        {
+          $set: {
+            status: outcome === "mismatch" ? "ignored" : "processed",
+            error: outcome === "mismatch" ? "The refund doesn't match its payment." : null,
+            processedAt: new Date(),
+            order: payment?.order ?? null,
+          },
+        },
+      );
+      applied++;
+    } catch (err) {
+      failed++;
+      logger.error("refund.deferred_apply_failed", { razorpayPaymentId, refundId: event.refund.refundId, error: serializeError(err) });
+      await WebhookEvent.updateOne({ _id: event._id, status: { $ne: "processed" } }, { $set: { status: "deferred", error: (err as Error).message?.slice(0, 1000) ?? "error" } }).catch(() => undefined);
+    }
+  }
+  return { applied, failed };
+}
+
+/**
+ * Backstop for the cron: saved refunds whose payment is on record but weren't applied. Each run
+ * takes at most `limit` payments, least recently tried first (a failed try moves to the back),
+ * and starts nothing after `deadline`. Each saved event is tried at most once, and one payment's
+ * failure never stops the others. Events are removed by the 90-day retention index, applied or not.
+ */
+export async function sweepDeferredRefunds({ limit = 100, deadline }: { limit?: number; deadline?: number } = {}) {
+  await connectToDatabase();
+  const totals = { payments: 0, applied: 0, failed: 0 };
+  const waiting = await WebhookEvent.aggregate<{ _id: string }>([
+    {
+      $match: {
+        provider: "razorpay",
+        "refund.paymentId": { $type: "string" },
+        $or: [{ status: { $in: ["deferred", "failed"] } }, { status: "processing", updatedAt: { $lte: new Date(Date.now() - STALE_EVENT_MS) } }],
+      },
+    },
+    { $group: { _id: "$refund.paymentId", lastTried: { $min: "$updatedAt" } } },
+    { $sort: { lastTried: 1, _id: 1 } },
+  ]);
+  if (!waiting.length) return totals;
+  // Refunds of payments that aren't on record keep waiting and don't use up the batch.
+  const known = new Set(await Payment.distinct("razorpayPaymentId", { razorpayPaymentId: { $in: waiting.map((w) => w._id) } }));
+  for (const { _id: id } of waiting.filter((w) => known.has(w._id)).slice(0, limit)) {
+    if (deadline !== undefined && Date.now() >= deadline) break;
+    totals.payments++;
+    try {
+      const result = await applyDeferredRefunds(id, { deadline });
+      totals.applied += result.applied;
+      totals.failed += result.failed;
+    } catch (err) {
+      totals.failed++;
+      logger.error("refund.sweep_payment_failed", { razorpayPaymentId: id, error: serializeError(err) });
+      // Send it to the back of the queue (best effort).
+      await WebhookEvent.updateMany({ "refund.paymentId": id, status: { $in: ["deferred", "failed"] } }, { $set: { error: "Retry failed; will be tried again." } }).catch(() => undefined);
+    }
+  }
+  return totals;
 }

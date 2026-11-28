@@ -15,7 +15,12 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ProductImage } from "@/components/ui/ProductImage";
 import { PayNow } from "@/components/checkout/PayNow";
 import { AccountShell } from "./AccountNav";
-import { AddressBlock, OrderItems, OrderTimeline, OrderTotals, PAYMENT_LABEL, StatusBadge } from "./OrderParts";
+import { AfterSales } from "./AfterSales";
+import { ReviewableOrderItems } from "./OrderReviews";
+import { AddressBlock, OrderTimeline, OrderTotals, OrderUpdates, PAYMENT_LABEL, StatusBadge } from "./OrderParts";
+
+/** Orders that were never paid have no delivery progress to list. */
+const UNPAID_STATUSES = ["Payment Pending", "Payment Failed", "Expired"];
 
 /* ---------- My Orders ---------- */
 
@@ -191,10 +196,17 @@ export function OrderDetailView({ id }: { id: string }) {
           <OrderTimeline order={order} />
           <PayNow order={order} onChange={retry} />
         </section>
+        <AfterSales order={order} onOrderChanged={retry} />
+        {!UNPAID_STATUSES.includes(order.status) && (
+          <section className="rounded-2xl border border-line p-5 sm:p-6">
+            <h2 className="mb-4 font-semibold">Order updates</h2>
+            <OrderUpdates order={order} />
+          </section>
+        )}
         <div className="grid gap-5 md:grid-cols-[1fr_280px]">
           <section className="rounded-2xl border border-line p-5 sm:p-6">
             <h2 className="mb-4 font-semibold">Items</h2>
-            <OrderItems order={order} />
+            <ReviewableOrderItems order={order} />
           </section>
           <div className="space-y-5">
             <section className="rounded-2xl border border-line p-5">
@@ -293,11 +305,16 @@ export function TrackOrderView({ initialId }: { initialId: string }) {
                 </Link>
               </div>
               <OrderTimeline order={order} />
-              <p className="mt-8 rounded-xl bg-canvas px-4 py-3 text-xs text-muted">
-                {order.status === "Payment Pending"
-                  ? "This order is waiting for payment. It moves to “Order Placed” once payment is confirmed."
-                  : "Courier tracking details will appear here once your order ships."}
-              </p>
+              {order.status === "Payment Pending" && (
+                <p className="mt-8 rounded-xl bg-canvas px-4 py-3 text-xs text-muted">
+                  This order is waiting for payment. It moves to “Order Placed” once payment is confirmed.
+                </p>
+              )}
+              {!UNPAID_STATUSES.includes(order.status) && (
+                <div className="mt-8 border-t border-line pt-6">
+                  <OrderUpdates order={order} />
+                </div>
+              )}
             </section>
           ) : (
             <div className="rounded-2xl bg-canvas px-6 py-12 text-center">

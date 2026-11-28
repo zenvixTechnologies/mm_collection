@@ -1,5 +1,5 @@
 import "server-only";
-import type { Types } from "mongoose";
+import { Types } from "mongoose";
 import { PERMISSIONS, type Permission } from "@/server/auth/permissions";
 import { ACCESS_TOKEN_TTL_SECONDS, signAccessToken } from "@/server/auth/jwt";
 import { burnPasswordCheck, hashPassword, verifyPassword } from "@/server/auth/password";
@@ -13,8 +13,6 @@ import { audit } from "./audit.service";
 
 /** Admin sessions last at most 7 days, then a fresh sign-in is required. */
 export const ADMIN_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
-export const MAX_FAILED_LOGINS = 5;
-export const LOCKOUT_MINUTES = 15;
 
 const INVALID = "Incorrect username/email or password.";
 
@@ -66,7 +64,14 @@ export interface IssuedSession {
   refreshMaxAge: number;
 }
 
-/** `identifier` is a username or an email address. */
+/** Counted for visibility only. The same write whether or not the account exists, so timing says less. */
+const countFailure = (adminId?: Types.ObjectId) => Admin.updateOne({ _id: adminId ?? new Types.ObjectId() }, { $inc: { failedLoginCount: 1 } });
+
+/**
+ * `identifier` is a username or an email address. Brute-force limits are applied by the caller
+ * (security/admin-login-limit) before this runs; accounts are never locked here, so a correct
+ * password is never refused because of other people's guesses.
+ */
 export async function loginAdmin(identifier: string, password: string, meta: SessionMeta): Promise<IssuedSession> {
   getEnv("auth"); // fail fast (503) if JWT secrets are missing
   await connectToDatabase();
@@ -75,28 +80,14 @@ export async function loginAdmin(identifier: string, password: string, meta: Ses
 
   if (!admin) {
     await burnPasswordCheck(password);
+    await countFailure();
     await audit({ name: "unknown", email: normalized, ...meta }, "admin.login_failed", { type: "admin", label: normalized }, { reason: "unknown_email" });
     throw unauthorized(INVALID);
   }
 
-  if (admin.lockedUntil && admin.lockedUntil > new Date()) {
-    const minutes = Math.ceil((admin.lockedUntil.getTime() - Date.now()) / 60_000);
-    throw new AppError(423, "ACCOUNT_LOCKED", `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`);
-  }
-
   const passwordOk = await verifyPassword(password, admin.passwordHash);
   if (!passwordOk || admin.status !== "active") {
-    if (!passwordOk) {
-      // Atomic increment; lock once the limit is reached.
-      const updated = await Admin.findOneAndUpdate({ _id: admin._id }, { $inc: { failedLoginCount: 1 } }, { new: true }).lean();
-      if (updated && updated.failedLoginCount >= MAX_FAILED_LOGINS) {
-        await Admin.updateOne(
-          { _id: admin._id },
-          { $set: { lockedUntil: new Date(Date.now() + LOCKOUT_MINUTES * 60_000), failedLoginCount: 0 } },
-        );
-        await audit({ adminId: admin._id.toString(), name: admin.name, email: admin.email ?? admin.username, ...meta }, "admin.locked", { type: "admin", id: admin._id.toString(), label: admin.email ?? admin.username ?? undefined });
-      }
-    }
+    await countFailure(admin._id);
     await audit(
       { adminId: admin._id.toString(), name: admin.name, email: admin.email ?? admin.username, ...meta },
       "admin.login_failed",

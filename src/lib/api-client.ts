@@ -23,6 +23,7 @@ export interface ApiResult<T> {
   data: T;
   message: string;
   pagination?: PaginationMeta;
+  meta?: Record<string, unknown>;
 }
 
 export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -85,7 +86,7 @@ export function createApiClient({ base, refreshPath }: { base: string; refreshPa
       if (res.status === 401) signedOutListeners.forEach((fn) => fn());
       throw new ApiError(body.message, res.status, body.error.code, body.error.issues);
     }
-    return { data: body.data, message: body.message, pagination: body.meta?.pagination as PaginationMeta | undefined };
+    return { data: body.data, message: body.message, pagination: body.meta?.pagination as PaginationMeta | undefined, meta: body.meta };
   }
 
   return {

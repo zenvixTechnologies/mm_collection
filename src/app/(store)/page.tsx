@@ -8,6 +8,7 @@ import { Testimonials } from "@/components/home/Testimonials";
 import { TrustBar } from "@/components/home/TrustBar";
 import { WhyChoose } from "@/components/home/WhyChoose";
 import { ProductGrid } from "@/components/products/ProductGrid";
+import { RecentlyViewed } from "@/components/products/RecentlyViewed";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import Link from "next/link";
 import { getCatalog } from "@/server/services/catalog.service";
@@ -83,6 +84,9 @@ export default async function HomePage() {
           <MobileViewAll href="/best-sellers?for=women" label="View all best sellers" />
         </div>
       </section>
+
+      {/* Only for shoppers who have opened a product in this browser; renders nothing otherwise. */}
+      <RecentlyViewed className="mt-16 sm:mt-24" />
 
       <section aria-labelledby="dresses-heading" className="container-page mt-16 sm:mt-24">
         <SectionHeading

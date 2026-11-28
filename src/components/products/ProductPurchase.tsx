@@ -18,6 +18,7 @@ import { PincodeChecker } from "./PincodeChecker";
 import { ColourDisclaimer } from "./ColourDisclaimer";
 import { SizeGuide } from "./SizeGuide";
 import { StockStatus } from "./StockStatus";
+import { useReportColour } from "./SelectedColour";
 import { VariantPicker } from "./VariantPicker";
 import { WishlistButton } from "./WishlistButton";
 
@@ -30,6 +31,8 @@ export function ProductPurchase({ product }: { product: Product }) {
   const undergarment = isUndergarment(product);
 
   useEffect(() => addRecent(product.id), [addRecent, product.id]);
+  const reportColour = useReportColour();
+  useEffect(() => reportColour?.(p.color), [reportColour, p.color]);
 
   /** If size/colour is missing, bring the picker (and its error) into view — matters most from the mobile sticky bar. */
   const revealOptions = () => {
@@ -62,8 +65,10 @@ export function ProductPurchase({ product }: { product: Product }) {
         <WishlistButton productId={product.id} productName={product.name} variant="outline" className="mt-1 h-11 w-11 sm:hidden" />
       </div>
       <a href="#reviews" className="mt-2 inline-flex items-center gap-2 text-sm text-muted hover:text-ink">
-        <Rating value={product.rating} showValue size={15} />
-        <span className="underline underline-offset-2">{product.reviewCount} reviews</span>
+        <Rating value={product.rating} showValue={product.reviewCount > 0} size={15} />
+        <span className="underline underline-offset-2">
+          {product.reviewCount === 0 ? "No reviews yet" : `${product.reviewCount} review${product.reviewCount === 1 ? "" : "s"}`}
+        </span>
       </a>
 
       <div className="mt-5">
@@ -75,7 +80,7 @@ export function ProductPurchase({ product }: { product: Product }) {
 
       <div id="pdp-variants" className="mt-7 scroll-mt-28">
         <VariantPicker
-          product={product}
+          product={p.product}
           size={p.size}
           color={p.color}
           onSize={p.setSize}
@@ -92,7 +97,7 @@ export function ProductPurchase({ product }: { product: Product }) {
           <p className="mb-2 text-sm font-semibold">Quantity</p>
           <QuantitySelector value={p.quantity} max={p.maxQty} onChange={p.setQuantity} />
         </div>
-        <StockStatus stock={product.stock} className="mt-7" />
+        <StockStatus stock={p.displayStock} className="mt-7" />
       </div>
 
       {/* Desktop / tablet actions */}

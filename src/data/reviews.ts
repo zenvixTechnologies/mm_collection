@@ -90,27 +90,3 @@ export const testimonials: Review[] = [
     productName: "Cotton Nightwear Set",
   },
 ];
-
-const REVIEW_POOL: Omit<Review, "id" | "date">[] = [
-  { name: "Aishwarya R.", location: "Kochi", rating: 5, title: "Loved it!", comment: "Fabric quality is excellent and the colour is exactly as shown. Fits true to size." },
-  { name: "Meera S.", location: "Pune", rating: 4, title: "Good value", comment: "Very pretty and comfortable. Stitching is neat. Slightly long for my height but easily altered." },
-  { name: "Shabana K.", location: "Kannur", rating: 5, title: "Perfect for festivals", comment: "Wore it for Onam and got so many compliments. Delivery was quick and packaging was neat." },
-  { name: "Ritika P.", location: "Delhi", rating: 4, title: "Nice fit", comment: "Fits well around the shoulders and waist. The material feels breathable even in humid weather." },
-  { name: "Gayathri M.", location: "Kollam", rating: 5, title: "Premium feel", comment: "Feels much more expensive than the price. Washed it once and it still looks brand new." },
-  { name: "Jasmine A.", location: "Alappuzha", rating: 3, title: "Pretty but runs small", comment: "Lovely design, but I'd suggest ordering one size up. Exchange was easy though." },
-];
-
-/** Deterministic product reviews so server and client render identical content. */
-export function getProductReviews(productId: string, count = 4): Review[] {
-  const seed = Number(productId.replace(/\D/g, "")) || 1;
-  return Array.from({ length: count }, (_, i) => {
-    const base = REVIEW_POOL[(seed + i * 2) % REVIEW_POOL.length];
-    const day = ((seed * 7 + i * 11) % 27) + 1;
-    const month = 10 - ((seed + i) % 4);
-    return {
-      ...base,
-      id: `${productId}-r${i}`,
-      date: `2026-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
-    };
-  });
-}

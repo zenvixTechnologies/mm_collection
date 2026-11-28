@@ -1,6 +1,6 @@
 import type { Audience, Category, Product, Size } from "@/types";
 import { AUDIENCES } from "@/data/audiences";
-import { categoryFullName, productInCategory } from "./catalog-query";
+import { categoryFullName } from "./catalog-query";
 
 export const SORT_OPTIONS = [
   { value: "featured", label: "Featured" },
@@ -54,20 +54,6 @@ export function countActiveFilters(f: Filters) {
   );
 }
 
-export function applyFilters(list: Product[], f: Filters) {
-  return list.filter((p) => {
-    if (f.audiences.length && !f.audiences.includes(p.audienceCategory)) return false;
-    if (f.categories.length && !f.categories.some((c) => productInCategory(p, c))) return false;
-    if (f.sizes.length && !f.sizes.some((s) => p.sizes.includes(s))) return false;
-    if (f.colors.length && !p.colors.some((c) => f.colors.includes(c.name))) return false;
-    if (f.minPrice !== null && p.price < f.minPrice) return false;
-    if (f.maxPrice !== null && p.price > f.maxPrice) return false;
-    if (f.inStockOnly && p.stock <= 0) return false;
-    if (f.minDiscount !== null && p.discount < f.minDiscount) return false;
-    return true;
-  });
-}
-
 export function sortProducts(list: Product[], sort: SortValue) {
   // Sold-out items always sink to the end, whatever the chosen order.
   const sorted = sortBy([...list], sort);
@@ -102,12 +88,19 @@ function normalize(s: string) {
   return s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9\s]/g, " ");
 }
 
-/** Lightweight keyword search across name, category, colours, fabric and description. */
-export function searchProducts(query: string, source: Product[], categories: Category[]) {
-  // Single letters are noise — "men's" normalises to "men s".
-  const terms = normalize(query)
+/** The words of a search. Single letters are noise — "men's" normalises to "men s". */
+export function searchTerms(query: string) {
+  return normalize(query)
     .split(/\s+/)
     .filter((t) => t.length > 1);
+}
+
+/** Simple singularisation: "kurtis" → "kurti", "dresses" → "dress". */
+export const searchStem = (term: string) => term.replace(/(es|s)$/, "");
+
+/** Lightweight keyword search across name, category, colours, fabric and description. */
+export function searchProducts(query: string, source: Product[], categories: Category[]) {
+  const terms = searchTerms(query);
   if (!terms.length) return [];
   const catName = (id: string) => {
     const c = categories.find((x) => x.id === id);
@@ -136,8 +129,7 @@ export function searchProducts(query: string, source: Product[], categories: Cat
       );
       let score = 0;
       for (const t of terms) {
-        // simple singularisation: "kurtis" → "kurti", "dresses" → "dress"
-        const stem = t.replace(/(es|s)$/, "");
+        const stem = searchStem(t);
         if (hits(name, t, stem)) score += 3;
         else if (hits(haystack, t, stem)) score += 1;
         else return { p, score: 0 };

@@ -1,5 +1,6 @@
 import "server-only";
 import { Schema } from "mongoose";
+import { CANCEL_REASON_KEYS } from "@/lib/after-sales";
 import { ActorSchema, AddressSchema, AUDIENCES, baseOptions, CustomerSchema, defineModel, ImageSchema, paise } from "./_shared";
 
 export const ORDER_STATUSES = [
@@ -7,6 +8,7 @@ export const ORDER_STATUSES = [
   "placed", // paid — "Order Placed" on the storefront
   "confirmed",
   "processing",
+  "packed",
   "shipped",
   "out_for_delivery",
   "delivered",
@@ -68,7 +70,14 @@ const OrderSchema = new Schema(
     statusHistory: {
       type: [
         new Schema(
-          { status: { type: String, enum: ORDER_STATUSES, required: true }, at: { type: Date, default: () => new Date() }, by: ActorSchema, note: String },
+          {
+            status: { type: String, enum: ORDER_STATUSES, required: true },
+            /** Previous status; recorded for fulfilment moves (absent on older entries). */
+            from: { type: String, enum: ORDER_STATUSES },
+            at: { type: Date, default: () => new Date() },
+            by: ActorSchema,
+            note: String,
+          },
           { _id: false },
         ),
       ],
@@ -100,10 +109,41 @@ const OrderSchema = new Schema(
     /** Stock is held until this time; a cron job expires unpaid orders after it. */
     reservationExpiresAt: { type: Date, default: null },
     stockReleased: { type: Boolean, default: false },
+    /** When the expiry job last looked at this unpaid order; used to take turns. */
+    expiryCheckedAt: { type: Date, default: null },
     refundedPaise: { ...paise(false), default: 0 },
-    tracking: {
-      type: new Schema({ courier: String, awb: String, url: String, shippedAt: Date }, { _id: false }),
+    /** Set only when the customer cancelled the order themselves, with why. */
+    cancellation: {
+      type: new Schema(
+        {
+          customer: { type: Schema.Types.ObjectId, ref: "User", required: true },
+          reason: { type: String, enum: CANCEL_REASON_KEYS, required: true },
+          otherReason: { type: String, maxlength: 500, default: "" },
+          details: { type: String, maxlength: 1000, default: "" },
+          requestedAt: { type: Date, required: true },
+          statusAtRequest: { type: String, enum: ORDER_STATUSES, required: true },
+        },
+        { _id: false },
+      ),
       default: null,
+    },
+    /** Legacy courier details on older orders. Kept so the data survives; no longer read or written. */
+    tracking: {
+      type: new Schema(
+        { courier: String, awb: String, url: String, shippedAt: Date, expectedDeliveryAt: Date, updatedAt: Date, updatedBy: ActorSchema },
+        { _id: false },
+      ),
+      default: null,
+    },
+    /** Legacy history of those details. Also kept, unused. */
+    trackingHistory: {
+      type: [
+        new Schema(
+          { courier: String, awb: String, url: String, shippedAt: Date, expectedDeliveryAt: Date, at: Date, by: ActorSchema },
+          { _id: false },
+        ),
+      ],
+      default: [],
     },
     notes: {
       type: [new Schema({ author: ActorSchema, text: { type: String, maxlength: 2000 }, at: { type: Date, default: () => new Date() } }, { _id: true })],
@@ -133,6 +173,7 @@ OrderSchema.index(
   { reservationExpiresAt: 1 },
   { partialFilterExpression: { status: "pending_payment" }, name: "pending_reservation_expiry" },
 );
+OrderSchema.index({ "cancellation.requestedAt": -1 }, { partialFilterExpression: { "cancellation.requestedAt": { $type: "date" } } });
 OrderSchema.index({ "exception.code": 1 }, { partialFilterExpression: { "exception.code": { $type: "string" } } });
 
 export const Order = defineModel("Order", OrderSchema, "orders");

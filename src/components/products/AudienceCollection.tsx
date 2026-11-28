@@ -1,24 +1,27 @@
 import type { Metadata } from "next";
 import type { Audience } from "@/types";
 import { getAudience } from "@/data/audiences";
+import type { ListingScope } from "@/lib/listing";
 import { getCatalog } from "@/server/services/catalog.service";
+import { loadListing, type SearchParams } from "@/server/services/listing-page";
 import { CategoryGrid } from "@/components/home/CategoryGrid";
 import { AudienceHero } from "./AudienceHero";
 import { ShopView } from "./ShopView";
 
 /** Shared body of the /women, /men, /kids and /home-living collection pages. */
-export async function AudienceCollection({ audience, sort }: { audience: Audience; sort?: string }) {
+export async function AudienceCollection({ audience, searchParams }: { audience: Audience; searchParams: SearchParams }) {
   const info = getAudience(audience);
   const list = (await getCatalog()).getProductsByAudience(audience);
+  const scope: ListingScope = { audience, defaultSort: "featured" };
+  const initial = await loadListing(info.href, scope, searchParams);
   return (
     <ShopView
       key={audience}
       title={info.title}
       description={info.tagline}
       breadcrumbs={[{ label: info.title }]}
-      products={list}
-      initialSort={sort}
-      audience={audience}
+      scope={scope}
+      initial={initial}
       hero={
         <>
           <AudienceHero key="hero" info={info} productCount={list.length} />

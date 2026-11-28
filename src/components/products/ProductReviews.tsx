@@ -1,29 +1,80 @@
 "use client";
 
-import { BadgeCheck } from "lucide-react";
-import { useState } from "react";
-import type { Product } from "@/types";
-import { getProductReviews } from "@/data/reviews";
+import Link from "next/link";
+import { BadgeCheck, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import type { Product, ProductReview, ProductReviewList } from "@/types";
+import { errorMessage } from "@/lib/api-client";
+import { customerApi } from "@/lib/customer-api";
 import { formatDate } from "@/lib/utils";
 import { toast } from "@/store/ui-store";
-import { Dialog } from "@/components/ui/Dialog";
 import { Rating } from "@/components/ui/Rating";
+import { ReviewImages } from "./ReviewImages";
 
-/** Approximate star distribution derived from the product's average rating (demo data). */
-function distribution(rating: number, count: number) {
-  const weights = [5, 4, 3, 2, 1].map((s) => Math.max(0.02, 1 - Math.abs(rating - s) / 1.6));
-  const total = weights.reduce((a, b) => a + b, 0);
-  return weights.map((w) => Math.round((w / total) * count));
+/** The published reviews. */
+export function ReviewList({ items }: { items: ProductReview[] }) {
+  return (
+    <ul className="divide-y divide-line">
+      {items.map((r) => (
+        <li key={r.id} className="py-5 first:pt-0">
+          <div className="flex items-center justify-between gap-3">
+            <Rating value={r.rating} size={13} />
+            <span className="text-xs text-muted">{formatDate(r.createdAt)}</span>
+          </div>
+          {r.title && <p className="mt-2 font-semibold">{r.title}</p>}
+          <p className="mt-1 text-[14.5px] leading-7 break-words whitespace-pre-line text-muted">{r.comment}</p>
+          <ReviewImages images={r.images} author={r.authorName} />
+          <p className="mt-2 flex items-center gap-1.5 text-xs text-muted">
+            <span className="font-medium text-ink">{r.authorName}</span> ·
+            <span className="flex items-center gap-1 text-success">
+              <BadgeCheck size={13} /> Verified buyer
+            </span>
+          </p>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
+/** Ratings and reviews on the product page — read-only. Reviews are written from the order page. */
 export function ProductReviews({ product }: { product: Product }) {
-  const reviews = getProductReviews(product.id);
-  const dist = distribution(product.rating, product.reviewCount);
-  const max = Math.max(...dist);
-  const [writeOpen, setWriteOpen] = useState(false);
-  const [stars, setStars] = useState(5);
-  const [text, setText] = useState("");
-  const [error, setError] = useState("");
+  const base = `/products/${encodeURIComponent(product.slug)}/reviews`;
+
+  const [list, setList] = useState<ProductReviewList | null>(null);
+  const [listError, setListError] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [version, setVersion] = useState(0);
+  const refresh = useCallback(() => setVersion((v) => v + 1), []);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    setListError(false);
+    customerApi<ProductReviewList>(base, { signal: ctrl.signal })
+      .then((r) => setList(r.data))
+      .catch((err: unknown) => {
+        if ((err as Error).name !== "AbortError") setListError(true);
+      });
+    return () => ctrl.abort();
+  }, [base, version]);
+
+  const average = list?.average ?? product.rating;
+  const count = list?.count ?? product.reviewCount;
+  const dist = list?.distribution ?? [0, 0, 0, 0, 0];
+  const max = Math.max(1, ...dist);
+
+  const loadMore = async () => {
+    if (!list) return;
+    setLoadingMore(true);
+    try {
+      const { data } = await customerApi<ProductReviewList>(`${base}?page=${list.page + 1}`);
+      const seen = new Set(list.items.map((r) => r.id));
+      setList({ ...data, items: [...list.items, ...data.items.filter((r) => !seen.has(r.id))] });
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   return (
     <section id="reviews" aria-labelledby="reviews-heading" className="scroll-mt-24">
@@ -32,9 +83,9 @@ export function ProductReviews({ product }: { product: Product }) {
       </h2>
       <div className="mt-6 grid gap-8 lg:grid-cols-[280px_1fr] lg:gap-12">
         <div className="rounded-2xl bg-canvas p-6">
-          <p className="font-display text-5xl font-semibold">{product.rating.toFixed(1)}</p>
-          <Rating value={product.rating} size={18} className="mt-2" />
-          <p className="mt-1 text-sm text-muted">Based on {product.reviewCount} reviews</p>
+          <p className="font-display text-5xl font-semibold">{count ? average.toFixed(1) : "—"}</p>
+          <Rating value={average} size={18} className="mt-2" />
+          <p className="mt-1 text-sm text-muted">{count ? `Based on ${count} review${count === 1 ? "" : "s"}` : "No reviews yet"}</p>
           <ul className="mt-5 space-y-2">
             {dist.map((n, i) => (
               <li key={i} className="flex items-center gap-3 text-xs text-muted">
@@ -46,85 +97,37 @@ export function ProductReviews({ product }: { product: Product }) {
               </li>
             ))}
           </ul>
-          <button type="button" onClick={() => setWriteOpen(true)} className="btn-outline mt-6 w-full">
-            Write a review
-          </button>
+          <p className="mt-6 border-t border-line pt-4 text-center text-xs leading-5 text-muted">
+            Bought this? Once it&apos;s delivered, you can review it from{" "}
+            <Link href="/account/orders" className="font-semibold text-ink underline">
+              My Orders
+            </Link>
+            .
+          </p>
         </div>
 
-        <ul className="divide-y divide-line">
-          {reviews.map((r) => (
-            <li key={r.id} className="py-5 first:pt-0">
-              <div className="flex items-center justify-between gap-3">
-                <Rating value={r.rating} size={13} />
-                <span className="text-xs text-muted">{formatDate(r.date)}</span>
-              </div>
-              <p className="mt-2 font-semibold">{r.title}</p>
-              <p className="mt-1 text-[14.5px] leading-7 text-muted">{r.comment}</p>
-              <p className="mt-2 flex items-center gap-1.5 text-xs text-muted">
-                <span className="font-medium text-ink">{r.name}</span> · {r.location}
-                <span className="flex items-center gap-1 text-success">
-                  <BadgeCheck size={13} /> Verified buyer
-                </span>
-              </p>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <Dialog open={writeOpen} onClose={() => setWriteOpen(false)} title="Write a review" variant="bottom-sheet">
-        <form
-          className="space-y-5 p-5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (text.trim().length < 10) {
-              setError("Please write at least 10 characters.");
-              return;
-            }
-            setWriteOpen(false);
-            setText("");
-            setError("");
-            toast.success("Thanks! Your review has been submitted for moderation.");
-          }}
-        >
-          <p className="text-sm text-muted">Reviewing: <strong className="text-ink">{product.name}</strong></p>
-          <fieldset>
-            <legend className="field-label">Your rating</legend>
-            <div className="flex gap-1">
-              {[1, 2, 3, 4, 5].map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setStars(s)}
-                  aria-label={`${s} star${s > 1 ? "s" : ""}`}
-                  aria-pressed={stars === s}
-                  className={`text-3xl leading-none ${s <= stars ? "text-gold" : "text-line"}`}
-                >
-                  ★
-                </button>
-              ))}
-            </div>
-          </fieldset>
+        {list && list.items.length > 0 ? (
           <div>
-            <label htmlFor="review-text" className="field-label">
-              Your review
-            </label>
-            <textarea
-              id="review-text"
-              rows={4}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              aria-invalid={error ? true : undefined}
-              className="field-input h-auto py-3"
-              placeholder="How was the fit, fabric and colour?"
-            />
-            {error && <p className="field-error">{error}</p>}
+            <ReviewList items={list.items} />
+            {list.page < list.totalPages && (
+              <button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="btn-outline mt-4 min-h-10 px-6 text-[13px]">
+                {loadingMore && <Loader2 size={15} className="animate-spin" />} Load more reviews
+              </button>
+            )}
           </div>
-          <button type="submit" className="btn-primary w-full">
-            Submit review
-          </button>
-          <p className="text-center text-xs text-muted">Demo store: reviews are not published.</p>
-        </form>
-      </Dialog>
+        ) : listError ? (
+          <p className="text-sm text-muted" role="alert">
+            We couldn&apos;t load reviews.{" "}
+            <button type="button" onClick={refresh} className="font-semibold text-ink underline">
+              Try again
+            </button>
+          </p>
+        ) : list ? (
+          <p className="text-sm text-muted">There are no reviews for this product yet.</p>
+        ) : (
+          <div className="skeleton h-40 rounded-2xl" role="status" aria-label="Loading reviews" />
+        )}
+      </div>
     </section>
   );
 }

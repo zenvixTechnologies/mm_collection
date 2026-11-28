@@ -3,6 +3,9 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, ZoomIn } from "lucide-react";
 import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { FALLBACK_IMAGE } from "@/data/images";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
 import { ProductImage } from "@/components/ui/ProductImage";
@@ -10,11 +13,22 @@ import { ColourInfoButton } from "./ColourDisclaimer";
 
 const VIEW_LABELS = ["Front view", "Detail close-up", "Fabric close-up", "Additional view"];
 
-export function ProductGallery({ images, name }: { images: string[]; name: string }) {
-  const [index, setIndex] = useState(0);
+export function ProductGallery({ images: given, name, galleryKey = "", notice = null }: { images: string[]; name: string; galleryKey?: string; notice?: string | null }) {
+  const images = given.length ? given : [FALLBACK_IMAGE];
+  const [chosen, setIndex] = useState(0);
   const [zoom, setZoom] = useState<{ x: number; y: number } | null>(null);
+  // A different colour starts again at its first photo. Adjusted during render, so no frame shows
+  // the old position.
+  const [shownKey, setShownKey] = useState(galleryKey);
+  if (shownKey !== galleryKey) {
+    setShownKey(galleryKey);
+    setIndex(0);
+    setZoom(null);
+  }
+  const index = shownKey === galleryKey && chosen < images.length ? chosen : 0;
   const [lightbox, setLightbox] = useState(false);
   const touchX = useRef<number | null>(null);
+  const hydrated = useHydrated();
 
   const go = (d: number) => setIndex((i) => (i + d + images.length) % images.length);
 
@@ -24,7 +38,9 @@ export function ProductGallery({ images, name }: { images: string[]; name: strin
   };
 
   return (
-    <div className="lg:grid lg:grid-cols-[84px_1fr] lg:gap-4">
+    // Desktop: the photo keeps its 4:5 shape, so its width is capped to make it fit below the sticky
+    // header (100px = thumbnail column + gap; 7rem = header offset + breathing room).
+    <div className="lg:mx-auto lg:grid lg:w-full lg:max-w-[calc((100dvh-7rem)*0.8+100px)] lg:grid-cols-[84px_1fr] lg:gap-4">
       {/* Thumbnails (desktop) */}
       <ul className="hidden flex-col gap-3 lg:flex" aria-label="Product images">
         {images.map((src, i) => (
@@ -60,7 +76,8 @@ export function ProductGallery({ images, name }: { images: string[]; name: strin
             touchX.current = null;
           }}
         >
-          <AnimatePresence initial={false} mode="popLayout">
+          {/* Keyed by colour: the previous colour's photo is removed at once, not faded out. */}
+          <AnimatePresence key={galleryKey} initial={false} mode="popLayout">
             <motion.div
               key={images[index]}
               className="absolute inset-0"
@@ -122,29 +139,39 @@ export function ProductGallery({ images, name }: { images: string[]; name: strin
         <p className="sr-only" aria-live="polite">
           Image {index + 1} of {images.length}
         </p>
+        {notice && (
+          <p className="mt-3 rounded-xl bg-gold-soft px-4 py-2.5 text-[13px] leading-5 text-ink" role="status">
+            {notice}
+          </p>
+        )}
       </div>
 
-      <Dialog open={lightbox} onClose={() => setLightbox(false)} title={name} variant="center" className="max-w-3xl">
-        <div className="relative aspect-[4/5] max-h-[78dvh] w-full bg-sand">
-          <ProductImage src={images[index]} alt={`${name} — enlarged`} fill sizes="(min-width: 768px) 768px, 100vw" className="object-contain" />
-          <button
-            type="button"
-            onClick={() => go(-1)}
-            className="absolute top-1/2 left-3 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow"
-            aria-label="Previous image"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <button
-            type="button"
-            onClick={() => go(1)}
-            className="absolute top-1/2 right-3 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow"
-            aria-label="Next image"
-          >
-            <ChevronRight size={20} />
-          </button>
-        </div>
-      </Dialog>
+      {/* Rendered on <body>: inside the sticky gallery column its z-index couldn't rise above the header or the page. */}
+      {hydrated &&
+        createPortal(
+          <Dialog open={lightbox} onClose={() => setLightbox(false)} title={name} variant="center" className="max-w-[min(48rem,calc((100dvh-7rem)*0.8))]!">
+            <div className="relative aspect-[4/5] max-h-[calc(100dvh-7rem)] w-full bg-sand">
+              <ProductImage src={images[index]} alt={`${name} — enlarged`} fill sizes="(min-width: 768px) 768px, 100vw" className="object-contain!" />
+              <button
+                type="button"
+                onClick={() => go(-1)}
+                className="absolute top-1/2 left-3 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow"
+                aria-label="Previous image"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <button
+                type="button"
+                onClick={() => go(1)}
+                className="absolute top-1/2 right-3 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow"
+                aria-label="Next image"
+              >
+                <ChevronRight size={20} />
+              </button>
+            </div>
+          </Dialog>,
+          document.body,
+        )}
     </div>
   );
 }

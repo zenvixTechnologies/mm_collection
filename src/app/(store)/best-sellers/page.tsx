@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { isAudience } from "@/data/audiences";
-import { getCatalog } from "@/server/services/catalog.service";
+import type { ListingScope } from "@/lib/listing";
+import { loadListing, type SearchParams } from "@/server/services/listing-page";
 import { ShopView } from "@/components/products/ShopView";
 
 export const metadata: Metadata = {
@@ -9,20 +9,19 @@ export const metadata: Metadata = {
   alternates: { canonical: "/best-sellers" },
 };
 
-type Props = { searchParams: Promise<{ sort?: string; category?: string; for?: string }> };
+type Props = { searchParams: Promise<SearchParams> };
+
+const SCOPE: ListingScope = { bestSeller: true, defaultSort: "best-selling" };
 
 export default async function BestSellersPage({ searchParams }: Props) {
-  const { sort, category, for: audience } = await searchParams;
-  const { getBestSellers } = await getCatalog();
+  const initial = await loadListing("/best-sellers", SCOPE, await searchParams);
   return (
     <ShopView
       title="Best Sellers"
       description="The pieces our customers love most — tried, tested and reordered."
       breadcrumbs={[{ label: "Best Sellers" }]}
-      products={getBestSellers()}
-      initialSort={sort ?? "best-selling"}
-      initialCategory={category}
-      initialAudience={isAudience(audience) ? audience : undefined}
+      scope={SCOPE}
+      initial={initial}
     />
   );
 }

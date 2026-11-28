@@ -16,6 +16,7 @@ const DRAFT_IDS = new Set(products.slice(-2).map((p) => p.id));
 
 export const mockProducts: AdminProduct[] = products.map((p, i) => ({
   ...p,
+  variants: undefined, // the sample data has no per-variant stock
   images: [...p.images],
   sizes: [...p.sizes],
   colors: p.colors.map((c) => ({ ...c })),

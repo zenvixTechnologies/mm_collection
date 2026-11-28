@@ -58,6 +58,17 @@ const schemas = {
     /** Razorpay Dashboard → Webhooks → the secret set on the webhook. */
     RAZORPAY_WEBHOOK_SECRET: str,
   }),
+  /** Admin sign-in limits. All optional; the bounds stop a typo from switching protection off. */
+  adminLogin: z.object({
+    ADMIN_LOGIN_IP_LIMIT: z.coerce.number().int().min(5).max(200).default(30),
+    ADMIN_LOGIN_ACCOUNT_IP_LIMIT: z.coerce.number().int().min(3).max(20).default(8),
+    ADMIN_LOGIN_ACCOUNT_LIMIT: z.coerce.number().int().min(10).max(500).default(40),
+    ADMIN_LOGIN_WINDOW_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
+    /** Self-hosting only (ignored on Vercel): the header your own proxy sets with the client IP. */
+    TRUSTED_CLIENT_IP_HEADER: z.string().regex(/^[a-z0-9-]{1,64}$/, "must be a lower-case header name").optional(),
+    /** Local `npm run start` only (ignored on Vercel): count admin sign-ins in memory without Upstash. */
+    ADMIN_LOGIN_ALLOW_MEMORY_RATE_LIMIT: z.enum(["true", "false"]).optional(),
+  }),
   upstash: z.object({
     UPSTASH_REDIS_REST_URL: z.url("must be the https REST URL from the Upstash console"),
     UPSTASH_REDIS_REST_TOKEN: str,

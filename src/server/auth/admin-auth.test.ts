@@ -1,7 +1,7 @@
 import { SignJWT } from "jose";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { NextRequest, type NextResponse } from "next/server";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { POST as changePassword } from "@/app/api/v1/admin/auth/change-password/route";
 import { POST as login } from "@/app/api/v1/admin/auth/login/route";
 import { POST as logout } from "@/app/api/v1/admin/auth/logout/route";
@@ -13,6 +13,7 @@ import { connectToDatabase, disconnectFromDatabase } from "@/server/db/connect";
 import { withApi } from "@/server/http/handler";
 import { ok } from "@/server/http/response";
 import { Admin, AuditLog, Role, Session } from "@/server/models";
+import { resetRateLimits } from "@/server/security/rate-limit";
 import { DEFAULT_ROLE_PERMISSIONS } from "./permissions";
 import { ADMIN_ACCESS_COOKIE, ADMIN_REFRESH_COOKIE, ADMIN_REFRESH_PATH } from "./cookies";
 import { requireAdmin } from "./guard";
@@ -112,15 +113,21 @@ describe("login", () => {
     expect(wrong.body.message).toBe(unknown.body.message);
   });
 
-  it("locks the account for 15 minutes after 5 failed attempts", async () => {
-    for (let i = 0; i < 5; i++) await signIn("owner@test.in", "wrong-password-1");
-    const locked = await signIn();
-    expect(locked.res.status).toBe(423);
-    expect(locked.body.error.code).toBe("ACCOUNT_LOCKED");
-    await Admin.updateOne({}, { lockedUntil: new Date(Date.now() - 1000) });
+  it("never locks the account: the right password still works after 5 failures, and further guessing is rate limited", async () => {
+    resetRateLimits();
+    onTestFinished(resetRateLimits); // don't leave the owner limited for the tests that follow
+    for (let i = 0; i < 5; i++) expect((await signIn("owner@test.in", "wrong-password-1")).res.status).toBe(401);
     expect((await signIn()).res.status).toBe(200);
-    expect(await AuditLog.countDocuments({ action: "admin.locked" })).toBeGreaterThan(0);
-  });
+
+    for (let i = 0; i < 8; i++) expect((await signIn("owner@test.in", "wrong-password-1")).res.status).toBe(401);
+    const limited = await signIn("owner@test.in", "wrong-password-1");
+    expect(limited.res.status).toBe(429);
+    expect(limited.body.error.code).toBe("RATE_LIMITED");
+    expect(Number(limited.res.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect((await signIn()).res.status).toBe(429);
+    expect((await Admin.findOne().lean())!.lockedUntil ?? null).toBeNull();
+    expect(await AuditLog.countDocuments({ action: "admin.login_throttled" })).toBe(1);
+  }, 30_000); // about 17 real bcrypt checks
 
   it("signs in with a username (case-insensitive), including special characters", async () => {
     const role = await Role.findOne({ key: "owner" });

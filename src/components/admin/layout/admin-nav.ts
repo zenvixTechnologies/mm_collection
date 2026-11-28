@@ -8,7 +8,8 @@ import {
   Settings,
   ShoppingBag,
   Shirt,
-  Truck,
+  Star,
+  Undo2,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -34,12 +35,14 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       { href: "/mm-hub/products", label: "Products", icon: Shirt },
       { href: "/mm-hub/categories", label: "Categories", icon: FolderTree },
       { href: "/mm-hub/inventory", label: "Inventory", icon: Boxes, badge: "lowStock" },
+      { href: "/mm-hub/reviews", label: "Reviews", icon: Star },
     ],
   },
   {
     label: "Sales",
     items: [
       { href: "/mm-hub/orders", label: "Orders", icon: ShoppingBag, badge: "newOrders" },
+      { href: "/mm-hub/returns", label: "Returns", icon: Undo2 },
       { href: "/mm-hub/customers", label: "Customers", icon: Users },
       { href: "/mm-hub/payments", label: "Payments", icon: CreditCard },
     ],
@@ -51,13 +54,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       { href: "/mm-hub/homepage", label: "Homepage", icon: LayoutTemplate },
     ],
   },
-  {
-    label: "Store",
-    items: [
-      { href: "/mm-hub/shipping", label: "Shipping", icon: Truck },
-      { href: "/mm-hub/settings", label: "Settings", icon: Settings },
-    ],
-  },
+  { label: "Store", items: [{ href: "/mm-hub/settings", label: "Settings", icon: Settings }] },
 ];
 
 export function isAdminPathActive(pathname: string, href: string) {

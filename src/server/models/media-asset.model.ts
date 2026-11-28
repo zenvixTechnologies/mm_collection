@@ -9,7 +9,7 @@ import { baseOptions, defineModel } from "./_shared";
 const MediaAssetSchema = new Schema(
   {
     publicId: { type: String, required: true },
-    purpose: { type: String, enum: ["product", "category", "banner", "logo"], required: true },
+    purpose: { type: String, enum: ["product", "category", "banner", "logo", "review"], required: true },
     status: { type: String, enum: ["signed", "uploaded", "attached", "deleted"], default: "signed" },
     url: { type: String, default: null },
     format: { type: String, default: null },
@@ -17,6 +17,10 @@ const MediaAssetSchema = new Schema(
     width: { type: Number, default: null },
     height: { type: Number, default: null },
     uploadedBy: { type: Schema.Types.ObjectId, ref: "Admin", default: null },
+    /* Review photos only: who may attach it, to which product, and whether an upload was used. */
+    customer: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    product: { type: Schema.Types.ObjectId, ref: "Product", default: null },
+    claimedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
   },
   baseOptions,

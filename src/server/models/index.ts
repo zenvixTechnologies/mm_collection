@@ -14,6 +14,7 @@ export { Offer } from "./offer.model";
 export { Order } from "./order.model";
 export { Payment } from "./payment.model";
 export { Product } from "./product.model";
+export { ReturnRequest } from "./return-request.model";
 export { Review } from "./review.model";
 export { Role } from "./role.model";
 export { Session } from "./session.model";

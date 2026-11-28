@@ -23,7 +23,7 @@ import { Payment } from "@/server/models/payment.model";
 import { WebhookEvent } from "@/server/models/webhook-event.model";
 import { logger, serializeError } from "@/server/utils/logger";
 import { reclaimReleasedCouponUse, redeemCouponUse } from "./coupon.service";
-import { applyRefundWebhook, type RazorpayRefund } from "./refund.service";
+import { STALE_EVENT_MS, applyDeferredRefunds, applyRefundWebhook, toStoredRefund, type RazorpayRefund } from "./refund.service";
 import { expireStaleOrders, loadOrderForViewer, paymentStateOf, toOrderView, type ExpiryCheck, type OrderDoc, type OrderViewer } from "./order.service";
 import { canSellAvailable, sellAvailableVariant, sellReservedVariant, type StockActor } from "./stock-reservation.service";
 
@@ -63,6 +63,15 @@ interface AttemptDoc {
   createdAt: Date;
 }
 
+/* ---------- Already paid? ---------- */
+
+/** States that mean money was taken. Refunding it, in part or in full, doesn't undo that. */
+const SETTLED_STATUSES = ["captured", "partially_refunded", "refunded"] as const;
+const isSettledStatus = (status: string) => (SETTLED_STATUSES as readonly string[]).includes(status);
+
+/** True once any payment has paid for the order — also after refunds. */
+const isSettled = (order: Pick<OrderDoc, "paymentStatus" | "razorpayPaymentId">) => !!order.razorpayPaymentId || isSettledStatus(order.paymentStatus);
+
 /* ---------- Gateway calls ---------- */
 
 /** Razorpay/network failures become a safe 502/503; nothing from the gateway reaches the client. */
@@ -90,9 +99,9 @@ function paymentProblem(p: RazorpayPayment, order: Pick<OrderDoc, "totalPaise">,
   return null;
 }
 
-/** Captures an authorized payment for exactly the stored amount (only if it otherwise checks out). */
+/** Captures an authorized payment for exactly the stored amount — only if the order is still unpaid and it otherwise checks out. */
 async function captureIfAuthorized(config: RazorpayConfig, p: RazorpayPayment, order: OrderDoc, attempt: AttemptDoc): Promise<RazorpayPayment> {
-  if (p.status !== "authorized" || paymentProblem(p, order, attempt)) return p;
+  if (p.status !== "authorized" || isSettled(order) || paymentProblem(p, order, attempt)) return p;
   try {
     return await razorpayRequest<RazorpayPayment>(config, `/payments/${encodeURIComponent(p.id)}/capture`, {
       method: "POST",
@@ -127,16 +136,22 @@ function heldLines(order: Pick<OrderDoc, "items">) {
  * to the stored Razorpay order, for the stored amount, in INR, domestic → converts the reserved
  * stock into a sale (or, if the hold had already been released, sells from available stock) →
  * finalises the coupon use → marks the order paid. Safe to call any number of times for the same
- * payment: the second call finds the order already paid by it and changes nothing.
+ * payment: a payment already on record changes nothing, even after it has been refunded. Any other
+ * payment for a paid order is flagged as a duplicate and never touches stock.
  */
 export async function completePayment(p: RazorpayPayment, source: "verify" | "webhook" | "reconcile"): Promise<CompletionResult> {
-  if (p.status !== "captured") return "not_captured";
+  // "refunded" only gets through so a replay of a recorded payment is recognised below.
+  if (p.status !== "captured" && p.status !== "refunded") return "not_captured";
   await connectToDatabase();
   const result = await withTransaction(async (session): Promise<CompletionResult> => {
     const attempt = await Payment.findOne({ razorpayOrderId: p.order_id }).session(session).lean<AttemptDoc>();
     if (!attempt) return "unknown_order";
     const order = await Order.findById(attempt.order).session(session).lean<OrderDoc>();
     if (!order) return "unknown_order";
+    // Already on record, as the payment that paid the order or as an extra one: nothing to do.
+    if (order.razorpayPaymentId === p.id) return "already_paid";
+    if (attempt.razorpayPaymentId === p.id) return "duplicate";
+    if (p.status !== "captured") return "not_captured";
     const now = new Date();
     const actor = systemActor(`razorpay ${source}`);
 
@@ -152,12 +167,12 @@ export async function completePayment(p: RazorpayPayment, source: "verify" | "we
       return "mismatch";
     }
 
-    if (order.paymentStatus === "captured") {
-      if (order.razorpayPaymentId === p.id) return "already_paid";
+    if (isSettled(order)) {
       // A second successful payment for an order that is already paid — must be refunded.
+      const message = `Second payment ${p.id} captured for an already-paid order. Refund it.`;
       await Order.updateOne(
-        { _id: order._id },
-        { $set: { exception: { code: "DUPLICATE_PAYMENT", message: `Second payment ${p.id} captured for an already-paid order. Refund it.`, at: now } } },
+        { _id: order._id, "exception.message": { $ne: message } }, // a redelivery doesn't re-flag it
+        { $set: { exception: { code: "DUPLICATE_PAYMENT", message, at: now } } },
         { session },
       );
       await Payment.updateOne(
@@ -192,9 +207,11 @@ export async function completePayment(p: RazorpayPayment, source: "verify" | "we
       paidAt: now,
       paymentLockUntil: null,
       ...(allowedMethod(p.method) ? { paymentMethod: p.method } : {}),
+      // A late sale means the order holds units again, so cancelling it must put them back.
+      ...(outcome === "late_paid" ? { stockReleased: false } : {}),
     };
     const res = await Order.updateOne(
-      { _id: order._id, paymentStatus: { $ne: "captured" } },
+      { _id: order._id, paymentStatus: { $nin: [...SETTLED_STATUSES] }, razorpayPaymentId: null },
       outcome === "late_unfulfillable"
         ? {
             $set: {
@@ -236,6 +253,16 @@ export async function completePayment(p: RazorpayPayment, source: "verify" | "we
   });
 
   logger[result === "paid" || result === "already_paid" ? "info" : "warn"]("payment.completion", { paymentId: p.id, razorpayOrderId: p.order_id, source, result });
+
+  // The payment is on record: apply any refund that arrived before it was (after the commit above).
+  if (result !== "unknown_order" && result !== "not_captured" && result !== "mismatch") {
+    const refunds = await applyDeferredRefunds(p.id).catch((err: unknown) => {
+      logger.error("refund.deferred_lookup_failed", { paymentId: p.id, error: serializeError(err) });
+      return { failed: 1 };
+    });
+    // A failed webhook is redelivered by Razorpay, which tries again. Checkout isn't held up.
+    if (refunds.failed && source === "webhook") throw new Error("Saved refunds couldn't be applied yet.");
+  }
   return result;
 }
 
@@ -247,9 +274,9 @@ export async function recordPaymentFailure(p: RazorpayPayment, source: "verify" 
   await connectToDatabase();
   const attempt = await Payment.findOne({ razorpayOrderId: p.order_id }, { order: 1, status: 1 }).lean<AttemptDoc>();
   if (!attempt) return "unknown_order" as const;
-  if (attempt.status === "captured") return "ignored" as const; // failure arriving after success
+  if (isSettledStatus(attempt.status)) return "ignored" as const; // failure arriving after success
   const res = await Payment.updateOne(
-    { _id: attempt._id, status: { $ne: "captured" }, "failures.razorpayPaymentId": { $ne: p.id } },
+    { _id: attempt._id, status: { $nin: [...SETTLED_STATUSES] }, "failures.razorpayPaymentId": { $ne: p.id } },
     {
       $set: { status: "failed", errorCode: p.error_code ?? null, errorDescription: p.error_description?.slice(0, 500) ?? null },
       $push: {
@@ -286,12 +313,12 @@ export async function reconcileOrder(orderId: Types.ObjectId): Promise<GatewaySt
   await connectToDatabase();
   const attempts = await Payment.find({ order: orderId }).sort({ attempt: -1 }).lean<AttemptDoc[]>();
   if (!attempts.length) return "unpaid";
-  if (attempts.some((a) => a.status === "captured")) return "paid";
+  if (attempts.some((a) => isSettledStatus(a.status))) return "paid";
   const config = getRazorpayConfig();
   if (!config) return "unknown";
   const order = await Order.findById(orderId).lean<OrderDoc>();
   if (!order) return "unknown";
-  if (order.paymentStatus === "captured") return "paid";
+  if (isSettled(order)) return "paid";
 
   let processing = false;
   for (const attempt of attempts) {
@@ -334,7 +361,7 @@ export const paymentAwareExpiryCheck: ExpiryCheck = async (o) => {
 };
 
 /** The expiry sweep used by checkout and the cron endpoint. */
-export function expireUnpaidOrders(opts: { limit?: number; now?: Date } = {}) {
+export function expireUnpaidOrders(opts: { limit?: number; now?: Date; deadline?: number } = {}) {
   return expireStaleOrders({ ...opts, check: paymentAwareExpiryCheck });
 }
 
@@ -504,8 +531,8 @@ export async function verifyCheckoutPayment(orderNumber: string, viewer: OrderVi
   if (p.status === "authorized") p = await gateway("capture payment", () => captureIfAuthorized(config, p, order, attempt));
 
   let result: "paid" | "processing" | "failed";
-  if (p.status === "captured") {
-    const outcome = await completePayment(p, "verify");
+  const outcome = p.status === "captured" || p.status === "refunded" ? await completePayment(p, "verify") : "not_captured";
+  if (outcome !== "not_captured") {
     if (outcome === "mismatch") {
       throw new AppError(400, "PAYMENT_INVALID", `We couldn't match this payment to your order. Please contact us with payment ID ${p.id} — it will be refunded if needed.`);
     }
@@ -566,8 +593,8 @@ const REFUND_EVENTS = new Set(["refund.created", "refund.processed", "refund.fai
 /**
  * Razorpay webhook. The signature is checked over the raw body before anything is parsed or
  * trusted. Each event is recorded by its ID (X-Razorpay-Event-Id): a redelivered event that was
- * already processed is acknowledged without doing anything; one that failed earlier is processed
- * again. Events can arrive in any order — completion and failure handling are both idempotent and
+ * already processed is acknowledged without doing anything; one that failed earlier, or a refund
+ * still waiting for its payment ("deferred"), is processed again. Events can arrive in any order — completion and failure handling are both idempotent and
  * a failure never overrides a captured payment.
  */
 export async function handleWebhook(rawBody: string, signature: string | null, eventIdHeader: string | null) {
@@ -586,6 +613,9 @@ export async function handleWebhook(rawBody: string, signature: string | null, e
   const payloadHash = createHash("sha256").update(rawBody).digest("hex");
   const eventId = eventIdHeader && /^[A-Za-z0-9_.-]{1,100}$/.test(eventIdHeader) ? eventIdHeader : `sha256:${payloadHash}`;
   const payment = body.payload?.payment?.entity;
+  const refund = body.payload?.refund?.entity;
+  // Saved with the claim, so a refund is never lost if its payment isn't on record yet.
+  const storedRefund = REFUND_EVENTS.has(type) ? toStoredRefund(refund) : null;
   await connectToDatabase();
 
   // Claim the event (the unique index makes this atomic).
@@ -597,18 +627,19 @@ export async function handleWebhook(rawBody: string, signature: string | null, e
       type,
       payloadHash,
       razorpayOrderId: typeof payment?.order_id === "string" ? payment.order_id : null,
-      razorpayPaymentId: typeof payment?.id === "string" ? payment.id : null,
+      razorpayPaymentId: typeof payment?.id === "string" ? payment.id : (storedRefund?.paymentId ?? null),
+      refund: storedRefund,
       status: "processing",
     });
   } catch (err) {
     if ((err as { code?: number }).code !== 11000) throw err;
     const existing = await WebhookEvent.findOne({ provider: "razorpay", eventId }).lean();
     if (!existing) throw err;
-    const stale = existing.status === "processing" && Date.now() - new Date(existing.updatedAt as Date).getTime() > 5 * 60_000;
-    if (existing.status !== "failed" && !stale) return { duplicate: true, status: existing.status };
+    const stale = existing.status === "processing" && Date.now() - new Date(existing.updatedAt as Date).getTime() > STALE_EVENT_MS;
+    if (existing.status !== "failed" && existing.status !== "deferred" && !stale) return { duplicate: true, status: existing.status };
     eventDoc = await WebhookEvent.findOneAndUpdate(
       { _id: existing._id, status: existing.status, updatedAt: existing.updatedAt },
-      { $set: { status: "processing", error: null }, $inc: { attempts: 1 } },
+      { $set: { status: "processing", error: null, ...(storedRefund && !existing.refund ? { refund: storedRefund } : {}) }, $inc: { attempts: 1 } },
       { returnDocument: "after", projection: { _id: 1 } },
     ).lean();
     if (!eventDoc) return { duplicate: true, status: "processing" };
@@ -616,10 +647,9 @@ export async function handleWebhook(rawBody: string, signature: string | null, e
 
   try {
     let outcome: string;
-    const refund = body.payload?.refund?.entity;
     if (REFUND_EVENTS.has(type)) {
       outcome = refund && typeof refund.id === "string" && typeof refund.payment_id === "string" ? await applyRefundWebhook(refund) : "ignored";
-      if (outcome === "unknown_payment") outcome = "ignored";
+      if (outcome === "unknown_payment") outcome = storedRefund ? "deferred" : "ignored";
     } else if (!HANDLED.has(type)) outcome = "ignored";
     else if (!payment || typeof payment.id !== "string" || typeof payment.order_id !== "string") outcome = "ignored";
     else if (type === "payment.failed") outcome = await recordPaymentFailure(payment, "webhook");
@@ -629,9 +659,14 @@ export async function handleWebhook(rawBody: string, signature: string | null, e
         const config = razorpayConfig();
         const attempt = await Payment.findOne({ razorpayOrderId: p.order_id }).lean<AttemptDoc>();
         const order = attempt ? await Order.findById(attempt.order).lean<OrderDoc>() : null;
-        if (attempt && order && order.paymentStatus !== "captured") p = await captureIfAuthorized(config, p, order, attempt);
+        if (attempt && order) p = await captureIfAuthorized(config, p, order, attempt);
       }
       outcome = await completePayment(p, "webhook");
+    }
+    if (outcome === "deferred") {
+      // Unless the payment was recorded meanwhile and has already applied this refund.
+      await WebhookEvent.updateOne({ _id: eventDoc!._id, status: "processing" }, { $set: { status: "deferred" } });
+      return { duplicate: false, status: outcome };
     }
     const order = payment?.order_id ? await Payment.findOne({ razorpayOrderId: payment.order_id }, { order: 1 }).lean() : null;
     await WebhookEvent.updateOne(
@@ -640,7 +675,7 @@ export async function handleWebhook(rawBody: string, signature: string | null, e
     );
     return { duplicate: false, status: outcome };
   } catch (err) {
-    await WebhookEvent.updateOne({ _id: eventDoc!._id }, { $set: { status: "failed", error: (err as Error).message?.slice(0, 1000) ?? "error" } }).catch(() => undefined);
+    await WebhookEvent.updateOne({ _id: eventDoc!._id, status: { $ne: "processed" } }, { $set: { status: "failed", error: (err as Error).message?.slice(0, 1000) ?? "error" } }).catch(() => undefined);
     throw err; // → 5xx, so Razorpay delivers the event again
   }
 }

@@ -1,10 +1,10 @@
 import { AudienceCollection, audienceMetadata } from "@/components/products/AudienceCollection";
+import type { SearchParams } from "@/server/services/listing-page";
 
 export const metadata = audienceMetadata("kids");
 
-type Props = { searchParams: Promise<{ sort?: string }> };
+type Props = { searchParams: Promise<SearchParams> };
 
 export default async function KidsCollectionPage({ searchParams }: Props) {
-  const { sort } = await searchParams;
-  return <AudienceCollection audience="kids" sort={sort} />;
+  return <AudienceCollection audience="kids" searchParams={await searchParams} />;
 }

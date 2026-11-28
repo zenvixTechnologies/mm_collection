@@ -8,6 +8,7 @@ import type { Audience } from "@/types";
 import type { AdminProduct, ProductStatus } from "@/types/admin";
 import { stockState, type StockState } from "@/lib/admin/metrics";
 import { formatDate, formatPrice } from "@/lib/utils";
+import { colorsWithoutPhotos } from "@/lib/gallery";
 import { useAdminStore } from "@/store/admin-store";
 import { toast } from "@/store/ui-store";
 import { ProductImage } from "@/components/ui/ProductImage";
@@ -92,6 +93,11 @@ export function ProductsView() {
             {p.images[0] && <ProductImage src={p.images[0]} alt="" fill sizes="44px" unoptimized={p.images[0].startsWith("blob:")} />}
           </span>
           <span className="min-w-0">
+            {p.colors.length > 1 && colorsWithoutPhotos(p).length > 0 && (
+              <span className="mb-0.5 block text-[11px] font-semibold text-warning">
+                {colorsWithoutPhotos(p).length === p.colors.length ? "No colour photos" : `Colour photos missing: ${colorsWithoutPhotos(p).join(", ")}`}
+              </span>
+            )}
             <button type="button" onClick={() => openForm(p)} className="block max-w-[280px] truncate text-left font-semibold hover:text-accent hover:underline">
               {p.name}
             </button>
