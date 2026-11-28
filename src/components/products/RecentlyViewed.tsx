@@ -4,10 +4,11 @@ import { useCatalog } from "@/components/catalog/CatalogProvider";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { useRecentStore } from "@/store/ui-store";
 import type { Product } from "@/types";
+import { cn } from "@/lib/utils";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { ProductGrid } from "./ProductGrid";
 
-export function RecentlyViewed({ excludeId, title = "Recently viewed" }: { excludeId?: string; title?: string }) {
+export function RecentlyViewed({ excludeId, title = "Recently viewed", className = "mt-20" }: { excludeId?: string; title?: string; className?: string }) {
   const hydrated = useHydrated();
   const ids = useRecentStore((s) => s.ids);
   const { getProductById } = useCatalog();
@@ -20,7 +21,7 @@ export function RecentlyViewed({ excludeId, title = "Recently viewed" }: { exclu
   if (!items.length) return null;
 
   return (
-    <section aria-labelledby="recent-heading" className="container-page mt-20">
+    <section aria-labelledby="recent-heading" className={cn("container-page", className)}>
       <SectionHeading id="recent-heading" title={title} />
       <ProductGrid products={items} />
     </section>

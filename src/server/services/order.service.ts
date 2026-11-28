@@ -61,6 +61,7 @@ export const STATUS_LABEL: Record<DbStatus, StoreOrderStatus> = {
   placed: "Order Placed",
   confirmed: "Confirmed",
   processing: "Processing",
+  packed: "Packed",
   shipped: "Shipped",
   out_for_delivery: "Out for Delivery",
   delivered: "Delivered",
@@ -110,12 +111,20 @@ export interface OrderDoc {
   createdAt: Date;
 }
 
+/** Latest status change. Not the document's updatedAt, which also moves on staff-only edits. */
+function lastUpdate(o: OrderDoc) {
+  const times = (o.statusHistory ?? []).map((h) => new Date(h.at).getTime());
+  return times.length ? new Date(Math.max(...times)).toISOString() : undefined;
+}
+
 /** The storefront's Order shape. Contains no database IDs other than product references. */
 export function toOrderView(o: OrderDoc): StoreOrder {
   const history: StoreOrder["history"] = {};
   for (const h of o.statusHistory ?? []) history[STATUS_LABEL[h.status]] ??= new Date(h.at).toISOString();
   const a = o.shippingAddress;
+  const lastUpdatedAt = lastUpdate(o);
   return {
+    ...(lastUpdatedAt ? { lastUpdatedAt } : {}),
     id: o.orderNumber,
     createdAt: new Date(o.createdAt).toISOString(),
     items: o.items.map((i) => ({
@@ -247,23 +256,31 @@ export async function releaseUnpaidOrder(orderId: Types.ObjectId, to: EndStatus,
 export type ExpiryCheck = (order: { _id: Types.ObjectId; paymentAttemptCount?: number; reservationExpiresAt?: Date | null }) => Promise<"release" | "keep">;
 
 /**
- * Expires unpaid orders whose hold time has passed, oldest first. Called by the cron endpoint and,
+ * Expires unpaid orders whose hold time has passed: ones never looked at first (oldest hold first),
+ * then the one looked at longest ago, so orders that must be kept or keep failing can't block the
+ * rest. Handles at most `limit` orders and starts none after `deadline` (a Date.now() time).
+ * Called by the cron endpoint and,
  * opportunistically, before checkout — so abandoned checkouts never keep stock off sale for long.
  * `check` (the payment service's) asks the gateway first, so stock is never released while a
  * payment for the order succeeded or may still be processing.
  */
-export async function expireStaleOrders({ limit = 50, now = new Date(), check }: { limit?: number; now?: Date; check?: ExpiryCheck } = {}) {
+export async function expireStaleOrders({ limit = 50, now = new Date(), check, deadline }: { limit?: number; now?: Date; check?: ExpiryCheck; deadline?: number } = {}) {
   await connectToDatabase();
   const due = await Order.find(
     { status: "pending_payment", stockReleased: false, reservationExpiresAt: { $lte: now } },
     { _id: 1, paymentAttemptCount: 1, reservationExpiresAt: 1 },
   )
-    .sort({ reservationExpiresAt: 1 })
+    .sort({ expiryCheckedAt: 1, reservationExpiresAt: 1 })
     .limit(limit)
     .lean<{ _id: Types.ObjectId; paymentAttemptCount?: number; reservationExpiresAt?: Date | null }[]>();
+  let checked = 0;
   let expired = 0;
   for (const o of due) {
+    if (deadline !== undefined && Date.now() >= deadline) break;
+    checked++;
     try {
+      // Marked before the check, so an order that is kept, fails or times out goes to the back.
+      await Order.updateOne({ _id: o._id }, { $set: { expiryCheckedAt: new Date() } }, { timestamps: false });
       if (check && (await check(o)) === "keep") continue;
       if (await releaseUnpaidOrder(o._id, "expired", { type: "system", name: "reservation expiry" }, "Payment not completed in time")) expired++;
     } catch (err) {
@@ -271,5 +288,5 @@ export async function expireStaleOrders({ limit = 50, now = new Date(), check }:
     }
   }
   if (expired) logger.info("order.expired_reservations", { expired });
-  return { checked: due.length, expired };
+  return { checked, expired };
 }

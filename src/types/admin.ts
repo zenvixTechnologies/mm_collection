@@ -97,7 +97,7 @@ export interface AdminCategory extends Omit<Category, "id" | "slug"> {
 /* ---------- Orders, customers, payments ---------- */
 
 /** Fulfilment statuses plus the ones an order can have before or instead of being paid. */
-export type AdminOrderStatus = OrderStatus | "Cancelled" | "Payment Pending" | "Payment Failed" | "Expired";
+export type AdminOrderStatus = OrderStatus | "Packed" | "Cancelled" | "Payment Pending" | "Payment Failed" | "Expired";
 
 export type PaymentStatus = "created" | "pending" | "authorized" | "captured" | "failed" | "refunded" | "partially_refunded";
 
@@ -116,6 +116,8 @@ export interface AdminOrder extends Omit<Order, "status" | "history"> {
   tracking?: ShipmentTracking;
   /** Private notes visible only to staff. */
   notes: AdminNote[];
+  /** Present when the customer cancelled the order themselves. */
+  cancellation?: import("./index").CustomerCancellation & { statusAtRequest: AdminOrderStatus };
   /** From the API: placed without an account. */
   guest?: boolean;
   /** Rupees refunded so far (from Razorpay-confirmed refunds). */
@@ -123,7 +125,7 @@ export interface AdminOrder extends Omit<Order, "status" | "history"> {
   /** Something that needs staff attention (e.g. paid after the stock was released). */
   exception?: { code: string; message: string; at: string | null } | null;
   /** Every status change with who made it. */
-  timeline?: { status: AdminOrderStatus; at: string; by: string; note: string }[];
+  timeline?: { status: AdminOrderStatus; from?: AdminOrderStatus; at: string; by: string; note: string }[];
   /** Statuses the server will accept next for this order. */
   allowedTransitions?: AdminOrderStatus[];
 }
@@ -135,6 +137,53 @@ export interface AdminPage<T> {
   limit: number;
   total: number;
   totalPages: number;
+}
+
+/** A review in the admin list. Staff can view and delete, never edit. */
+export interface AdminReview {
+  id: string;
+  productName: string;
+  productSlug: string | null;
+  authorName: string;
+  rating: number;
+  title: string;
+  comment: string;
+  createdAt: string;
+  images: { url: string; width: number; height: number }[];
+  verified: boolean;
+  orderNumber: string | null;
+  /** Set if the order that proved the purchase was cancelled or fully refunded afterwards. */
+  orderNow: "cancelled" | "refunded" | null;
+}
+
+export interface AdminReturnRequest extends Omit<import("./index").CustomerReturnRequest, "history"> {
+  orderNumber: string;
+  customerName: string;
+  customerEmail: string;
+  sku: string;
+  unitPrice: number;
+  deliveredAt: string;
+  withinClaimWindow: boolean | null;
+  refund: import("./index").RefundSummary | null;
+  allowedStatuses: import("@/lib/after-sales").ReturnStatus[];
+  history: { status: string; at: string; by: string }[];
+  /** Staff only. */
+  adminNotes: AdminNote[];
+}
+
+export interface AdminCancellation {
+  /** The order number. */
+  id: string;
+  customerName: string;
+  customerEmail: string;
+  products: string[];
+  total: number;
+  reason: string;
+  otherReason: string;
+  details: string;
+  requestedAt: string;
+  statusAtRequest: string;
+  refund: import("./index").RefundSummary;
 }
 
 export interface AdminNote {

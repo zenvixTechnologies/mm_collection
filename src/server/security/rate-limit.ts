@@ -2,6 +2,7 @@ import "server-only";
 import { getEnv, isConfigured } from "@/server/config/env";
 import { tooManyRequests } from "@/server/http/errors";
 import { clientIp } from "@/server/http/request-info";
+import { resetAdminLoginLimits } from "@/server/security/admin-login-limit";
 import { logger, serializeError } from "@/server/utils/logger";
 
 /**
@@ -86,4 +87,5 @@ export async function enforceRateLimit(
 /** Tests only. */
 export function resetRateLimits() {
   memory.clear();
+  resetAdminLoginLimits();
 }

@@ -62,8 +62,10 @@ export function ProductPurchase({ product }: { product: Product }) {
         <WishlistButton productId={product.id} productName={product.name} variant="outline" className="mt-1 h-11 w-11 sm:hidden" />
       </div>
       <a href="#reviews" className="mt-2 inline-flex items-center gap-2 text-sm text-muted hover:text-ink">
-        <Rating value={product.rating} showValue size={15} />
-        <span className="underline underline-offset-2">{product.reviewCount} reviews</span>
+        <Rating value={product.rating} showValue={product.reviewCount > 0} size={15} />
+        <span className="underline underline-offset-2">
+          {product.reviewCount === 0 ? "No reviews yet" : `${product.reviewCount} review${product.reviewCount === 1 ? "" : "s"}`}
+        </span>
       </a>
 
       <div className="mt-5">

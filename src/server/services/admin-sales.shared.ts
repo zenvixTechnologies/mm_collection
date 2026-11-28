@@ -1,6 +1,7 @@
 import "server-only";
 import type { Types } from "mongoose";
 import type { AdminOrder, AdminOrderStatus, PaymentStatus } from "@/types/admin";
+import { CANCEL_REASONS, type CancelReason } from "@/lib/after-sales";
 import { paginationMeta } from "@/server/http/response";
 import { STATUS_LABEL, toOrderView, type OrderDoc } from "./order.service";
 
@@ -28,7 +29,8 @@ export const FULFILMENT_NEXT: Partial<Record<DbOrderStatus, DbOrderStatus[]>> = 
   pending_payment: ["cancelled"],
   placed: ["confirmed", "processing", "shipped", "cancelled"],
   confirmed: ["processing", "shipped", "cancelled"],
-  processing: ["shipped", "cancelled"],
+  processing: ["packed", "shipped", "cancelled"],
+  packed: ["shipped", "cancelled"],
   shipped: ["out_for_delivery", "delivered"],
   out_for_delivery: ["delivered"],
 };
@@ -36,9 +38,9 @@ export const FULFILMENT_NEXT: Partial<Record<DbOrderStatus, DbOrderStatus[]>> = 
 export interface AdminOrderDoc extends OrderDoc {
   user?: Types.ObjectId | null;
   refundedPaise?: number;
-  tracking?: { courier?: string; awb?: string; url?: string; shippedAt?: Date } | null;
+  cancellation?: { customer?: Types.ObjectId; reason: CancelReason; otherReason?: string; details?: string; requestedAt: Date; statusAtRequest: DbOrderStatus } | null;
   notes?: { _id: Types.ObjectId; author?: { name?: string }; text: string; at: Date }[];
-  statusHistory?: { status: DbOrderStatus; at: Date; by?: { type?: string; name?: string }; note?: string }[];
+  statusHistory?: { status: DbOrderStatus; from?: DbOrderStatus | null; at: Date; by?: { type?: string; name?: string }; note?: string }[];
   exception?: { code?: string; message?: string; at?: Date | null; resolvedAt?: Date | null } | null;
 }
 
@@ -61,8 +63,14 @@ export function toAdminOrder(o: AdminOrderDoc): AdminOrder {
     guest: !o.user,
     paymentStatus: (o.paymentStatus as PaymentStatus) ?? "pending",
     refunded: (o.refundedPaise ?? 0) / 100,
-    tracking: o.tracking?.awb
-      ? { courier: o.tracking.courier ?? "", awb: o.tracking.awb, url: o.tracking.url || undefined, shippedAt: o.tracking.shippedAt ? new Date(o.tracking.shippedAt).toISOString() : undefined }
+    cancellation: o.cancellation?.reason
+      ? {
+          reason: CANCEL_REASONS[o.cancellation.reason],
+          otherReason: o.cancellation.otherReason ?? "",
+          details: o.cancellation.details ?? "",
+          requestedAt: new Date(o.cancellation.requestedAt).toISOString(),
+          statusAtRequest: STATUS_LABEL[o.cancellation.statusAtRequest] as AdminOrderStatus,
+        }
       : undefined,
     notes: (o.notes ?? [])
       .map((n) => ({ id: String(n._id), author: n.author?.name ?? "Staff", text: n.text, createdAt: new Date(n.at).toISOString() }))
@@ -71,12 +79,17 @@ export function toAdminOrder(o: AdminOrderDoc): AdminOrder {
       o.exception?.code && !o.exception.resolvedAt
         ? { code: o.exception.code, message: o.exception.message ?? "", at: o.exception.at ? new Date(o.exception.at).toISOString() : null }
         : null,
-    timeline: (o.statusHistory ?? []).map((h) => ({
-      status: STATUS_LABEL[h.status] as AdminOrderStatus,
-      at: new Date(h.at).toISOString(),
-      by: h.by?.name ?? "system",
-      note: h.note ?? "",
-    })),
+    timeline: (o.statusHistory ?? []).map((h, i, all) => {
+      // History is append-only, so an entry without a stored "from" followed the one before it.
+      const from = h.from ?? all[i - 1]?.status;
+      return {
+        status: STATUS_LABEL[h.status] as AdminOrderStatus,
+        ...(from ? { from: STATUS_LABEL[from] as AdminOrderStatus } : {}),
+        at: new Date(h.at).toISOString(),
+        by: h.by?.name ?? "system",
+        note: h.note ?? "",
+      };
+    }),
     allowedTransitions: allowedTransitions(o),
   };
 }

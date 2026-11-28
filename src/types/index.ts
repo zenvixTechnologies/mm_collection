@@ -312,7 +312,8 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
  * that ended before it was paid.
  */
 export const ORDER_SIDE_STATUSES = ["Payment Pending", "Payment Failed", "Expired", "Cancelled"] as const;
-export type StoreOrderStatus = OrderStatus | (typeof ORDER_SIDE_STATUSES)[number];
+/** "Packed" is an optional step between Processing and Shipped (see timelineSteps). */
+export type StoreOrderStatus = OrderStatus | "Packed" | (typeof ORDER_SIDE_STATUSES)[number];
 
 export interface OrderItem {
   productId: string;
@@ -366,6 +367,8 @@ export interface StoreOrder extends Omit<Order, "status" | "history"> {
    * failed — they can try again while the order is reserved), paid or refunded.
    */
   paymentState?: "pending" | "failed" | "paid" | "refunded";
+  /** Latest status change (ISO). */
+  lastUpdatedAt?: string;
 }
 
 /** POST /api/v1/payments/razorpay/create and /payments/:id/retry — what Razorpay Checkout needs. */
@@ -415,6 +418,94 @@ export interface Review {
   comment: string;
   date: string;
   productName?: string;
+}
+
+export interface ReviewImage {
+  url: string;
+  width: number;
+  height: number;
+}
+
+/** A verified-purchase review as shoppers see it — no order or account details. */
+export interface ProductReview {
+  id: string;
+  /** First name and last initial. */
+  authorName: string;
+  rating: number;
+  title: string;
+  comment: string;
+  createdAt: string;
+  images: ReviewImage[];
+}
+
+export interface ProductReviewList {
+  average: number;
+  count: number;
+  /** Reviews per star, 5★ first. */
+  distribution: number[];
+  items: ProductReview[];
+  page: number;
+  totalPages: number;
+}
+
+/** The signed-in customer's position on one product of their order, decided by the server. */
+export interface OrderProductReview {
+  productId: string;
+  status: "awaiting_delivery" | "eligible" | "reviewed" | "unavailable";
+  review: ProductReview | null;
+}
+
+/** How much of an order's payment has really been returned. "pending" = nothing issued yet. */
+export interface RefundSummary {
+  state: "none" | "pending" | "processing" | "partial" | "refunded";
+  /** Completed and in-progress amounts, in rupees. */
+  refunded: number;
+  processing: number;
+}
+
+/** One order line, and whether a return can be requested for it now. */
+export interface ReturnLine {
+  itemId: string;
+  name: string;
+  size: string | null;
+  color: string | null;
+  quantity: number;
+  returnableQuantity: number;
+  reasons: import("@/lib/after-sales").ReturnReason[];
+  message: string | null;
+}
+
+/** A return request as its customer sees it — never staff notes or names. */
+export interface CustomerReturnRequest {
+  id: string;
+  name: string;
+  size: string | null;
+  color: string | null;
+  quantity: number;
+  reason: string;
+  explanation: string;
+  comments: string;
+  status: import("@/lib/after-sales").ReturnStatus;
+  statusLabel: string;
+  requestedAt: string;
+  history: { status: string; at: string }[];
+}
+
+export interface CustomerCancellation {
+  reason: string;
+  otherReason: string;
+  details: string;
+  requestedAt: string;
+}
+
+export interface AfterSalesView {
+  orderStatus: StoreOrderStatus;
+  cancel: "on" | "off" | "hidden";
+  cancellation: CustomerCancellation | null;
+  refund: RefundSummary | null;
+  returnWindowEndsAt: string | null;
+  lines: ReturnLine[];
+  requests: CustomerReturnRequest[];
 }
 
 export interface Offer {

@@ -81,7 +81,7 @@ export const ProductCard = memo(function ProductCard({ product, priority, showRa
             {product.name}
           </Link>
         </h3>
-        {showRating && <Rating value={product.rating} count={product.reviewCount} size={12} className="mt-1" />}
+        {showRating && product.reviewCount > 0 && <Rating value={product.rating} count={product.reviewCount} size={12} className="mt-1" />}
         <Price price={product.price} originalPrice={product.originalPrice} discount={product.discount} size="sm" className="mt-1" />
         <div className="mt-2 flex items-center gap-1.5" aria-label={`Available in ${product.colors.map((c) => c.name).join(", ")}`}>
           {product.colors.map((c) => (

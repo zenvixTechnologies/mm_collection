@@ -62,6 +62,17 @@ export function getResource(publicId: string) {
   return call<CloudinaryResource>(`/resources/image/upload/${publicId.split("/").map(encodeURIComponent).join("/")}`, { admin: true });
 }
 
+/**
+ * Has Cloudinary store its own copy of one of our images under a new ID, re-encoded at no more
+ * than 2000px with every bit of metadata (EXIF, GPS, XMP, IPTC) removed.
+ */
+export function copyImage(sourceUrl: string, publicId: string) {
+  const { apiKey, apiSecret } = cloudinaryConfig();
+  const params = { overwrite: "false", public_id: publicId, timestamp: String(Math.floor(Date.now() / 1000)), transformation: "c_limit,fl_force_strip,h_2000,w_2000" };
+  const form = new URLSearchParams({ ...params, file: sourceUrl, api_key: apiKey, signature: signParams(params, apiSecret) });
+  return call<CloudinaryResource>("/image/upload", { method: "POST", body: form });
+}
+
 /** Deletes an image and purges it from the CDN. "not found" counts as success. */
 export async function destroyImage(publicId: string): Promise<"ok" | "not found"> {
   const { apiKey, apiSecret } = cloudinaryConfig();

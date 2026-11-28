@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, Ban, CreditCard, ExternalLink, Loader2, Mail, MessageSquareText, Phone, Printer, ShoppingBag, Truck, User } from "lucide-react";
+import { AlertTriangle, Ban, CreditCard, Loader2, Mail, MessageSquareText, Phone, Printer, ShoppingBag, User } from "lucide-react";
 import { useState } from "react";
 import type { AdminOrder, AdminOrderStatus } from "@/types/admin";
 import { useAdminQuery } from "@/hooks/use-admin-query";
-import { adminApi, errorMessage } from "@/lib/admin-api";
+import { AdminApiError, adminApi, errorMessage } from "@/lib/admin-api";
 import { formatDate, formatPrice } from "@/lib/utils";
 import { useAdminSession } from "@/store/admin-store";
 import { toast } from "@/store/ui-store";
@@ -13,72 +13,23 @@ import { AddressBlock, OrderItems, OrderTimeline, OrderTotals } from "@/componen
 import { OrderStatusBadge, PaymentStatusBadge } from "../ui/Badge";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { TableEmpty } from "../ui/DataTable";
-import { SelectField, TextAreaField, TextField } from "../ui/FormControls";
+import { SelectField, TextAreaField } from "../ui/FormControls";
 import { PageHeader } from "../ui/PageHeader";
 import { Panel } from "../ui/Panel";
 import { LoadError } from "../ui/QueryState";
 import { timeAgo } from "../ui/format";
+import { OrderReturnsPanel } from "./OrderReturnsPanel";
 import { PAYMENT_METHOD_LABEL, toStoreOrder } from "./sales-helpers";
 
 interface OrderDetail {
   order: AdminOrder;
   payment: { paymentId: string | null; method: string | null; methodDetail: string; razorpayOrderId: string | null; razorpayPaymentId: string | null; attempts: number };
-  couriers: { name: string; trackingUrlTemplate: string }[];
 }
 
 const SIDE_STATUSES: AdminOrderStatus[] = ["Cancelled", "Payment Pending", "Payment Failed", "Expired"];
 
-function TrackingForm({ detail, onSaved, disabled }: { detail: OrderDetail; onSaved: (d: OrderDetail) => void; disabled: boolean }) {
-  const { order, couriers } = detail;
-  const [courier, setCourier] = useState(order.tracking?.courier ?? couriers[0]?.name ?? "");
-  const [awb, setAwb] = useState(order.tracking?.awb ?? "");
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const template = couriers.find((c) => c.name === courier)?.trackingUrlTemplate;
-  const url = template && awb.trim() ? template.replace("{awb}", encodeURIComponent(awb.trim())) : "";
-
-  return (
-    <form
-      onSubmit={async (e) => {
-        e.preventDefault();
-        if (!courier.trim()) return setError("Enter the courier name.");
-        if (!awb.trim()) return setError("Enter the AWB / tracking number.");
-        setError(null);
-        setSaving(true);
-        try {
-          const { data } = await adminApi<OrderDetail>(`/orders/${order.id}/tracking`, {
-            method: "PUT",
-            body: { courier: courier.trim(), awb: awb.trim(), url: url.startsWith("https://") ? url : "" },
-          });
-          onSaved(data);
-          toast.success("Tracking details saved");
-        } catch (err) {
-          setError(errorMessage(err));
-        } finally {
-          setSaving(false);
-        }
-      }}
-      className="space-y-3"
-      noValidate
-    >
-      {couriers.length ? (
-        <SelectField label="Courier" value={courier} onChange={(e) => setCourier(e.target.value)} options={couriers.map((c) => ({ value: c.name, label: c.name }))} disabled={disabled} />
-      ) : (
-        <TextField label="Courier" value={courier} onChange={(e) => setCourier(e.target.value)} placeholder="e.g. Delhivery" maxLength={80} disabled={disabled} />
-      )}
-      <TextField label="AWB / tracking number" value={awb} error={error ?? undefined} onChange={(e) => setAwb(e.target.value)} placeholder="e.g. DE123456789" maxLength={60} disabled={disabled} />
-      {order.tracking?.url && (
-        <a href={order.tracking.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[13px] font-semibold text-accent hover:underline">
-          Open courier tracking <ExternalLink size={13} aria-hidden />
-        </a>
-      )}
-      <button type="submit" className="btn-outline btn-sm w-full" disabled={disabled || saving}>
-        {saving && <Loader2 size={14} className="animate-spin" aria-hidden />}
-        {order.tracking ? "Update tracking" : "Save tracking"}
-      </button>
-    </form>
-  );
-}
+/** Moves the customer sees as a shipping milestone are confirmed first. */
+const CONFIRM_STATUSES: AdminOrderStatus[] = ["Shipped", "Out for Delivery", "Delivered"];
 
 export function OrderDetailView({ id }: { id: string }) {
   const valid = /^MM[A-Z0-9]{4,12}$/.test(id);
@@ -87,6 +38,8 @@ export function OrderDetailView({ id }: { id: string }) {
   const [nextStatus, setNextStatus] = useState<AdminOrderStatus | "">("");
   const [note, setNote] = useState("");
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmStatus, setConfirmStatus] = useState<AdminOrderStatus | null>(null);
+  const [statusNote, setStatusNote] = useState("");
   const [statusError, setStatusError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"status" | "note" | null>(null);
 
@@ -128,12 +81,14 @@ export function OrderDetailView({ id }: { id: string }) {
     setBusy("status");
     setStatusError(null);
     try {
-      replace((await adminApi<OrderDetail>(`/orders/${order.id}/status`, { method: "PATCH", body: { status: to } })).data);
+      replace((await adminApi<OrderDetail>(`/orders/${order.id}/status`, { method: "PATCH", body: { status: to, note: statusNote.trim() } })).data);
       setNextStatus("");
+      setStatusNote("");
       toast.success(successMessage);
     } catch (err) {
       setStatusError(errorMessage(err));
       toast.error(errorMessage(err));
+      if (err instanceof AdminApiError && err.status === 409) reload();
     } finally {
       setBusy(null);
     }
@@ -172,6 +127,42 @@ export function OrderDetailView({ id }: { id: string }) {
         </div>
       )}
 
+      {order.cancellation && (
+        <Panel className="mb-6" title="Cancelled by the customer">
+          <dl className="space-y-1.5 text-sm">
+            <div>
+              <dt className="inline text-muted">Reason: </dt>
+              <dd className="inline font-medium break-words">
+                {order.cancellation.reason}
+                {order.cancellation.otherReason && ` — ${order.cancellation.otherReason}`}
+              </dd>
+            </div>
+            {order.cancellation.details && (
+              <div>
+                <dt className="inline text-muted">Additional details: </dt>
+                <dd className="inline break-words whitespace-pre-line">{order.cancellation.details}</dd>
+              </div>
+            )}
+            <div>
+              <dt className="inline text-muted">Requested: </dt>
+              <dd className="inline">
+                {formatDate(order.cancellation.requestedAt, true)}, while the order was {order.cancellation.statusAtRequest}
+              </dd>
+            </div>
+          </dl>
+          {paid && (
+            <p className="mt-3 text-sm text-warning">
+              This payment hasn&apos;t been refunded.{" "}
+              <Link href={`/mm-hub/payments?q=${order.id}`} className="font-semibold underline">
+                Refund it from Payments
+              </Link>
+              .
+            </p>
+          )}
+        </Panel>
+      )}
+      <OrderReturnsPanel orderId={order.id} />
+
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="min-w-0 space-y-6 xl:col-span-2">
           <Panel title="Progress">
@@ -192,6 +183,7 @@ export function OrderDetailView({ id }: { id: string }) {
                 {order.timeline.map((t, i) => (
                   <li key={i} className="flex flex-wrap justify-between gap-x-3 text-muted">
                     <span>
+                      {t.from && <>{t.from} → </>}
                       <strong className="text-ink">{t.status}</strong> · {t.by}
                       {t.note && <span> — {t.note}</span>}
                     </span>
@@ -272,16 +264,21 @@ export function OrderDetailView({ id }: { id: string }) {
                   options={options.map((s) => ({ value: s, label: s }))}
                   error={statusError ?? undefined}
                 />
+                <TextAreaField
+                  label="Internal note (optional)"
+                  rows={2}
+                  maxLength={500}
+                  value={statusNote}
+                  onChange={(e) => setStatusNote(e.target.value)}
+                  hint="Saved in the status history. Customers never see it."
+                />
                 <button
                   type="button"
                   className="btn-primary btn-sm w-full"
                   disabled={busy === "status"}
                   onClick={() => {
-                    if (selectedStatus === "Shipped" && !order.tracking) {
-                      setStatusError("Add tracking details below before marking as shipped.");
-                      return;
-                    }
-                    void changeStatus(selectedStatus, `Order marked as ${selectedStatus}`);
+                    if (CONFIRM_STATUSES.includes(selectedStatus)) setConfirmStatus(selectedStatus);
+                    else void changeStatus(selectedStatus, `Order marked as ${selectedStatus}`);
                   }}
                 >
                   {busy === "status" && <Loader2 size={14} className="animate-spin" aria-hidden />} Update status
@@ -296,23 +293,6 @@ export function OrderDetailView({ id }: { id: string }) {
                     ? "You can view this order but not change it."
                     : <>This order is <strong className="text-ink">{order.status.toLowerCase()}</strong> — no further updates.</>}
               </p>
-            )}
-          </Panel>
-
-          <Panel
-            title={
-              <span className="inline-flex items-center gap-2">
-                <Truck size={16} className="text-gold-dark" aria-hidden /> Shipment
-              </span>
-            }
-            description="Shipping Charges Applicable"
-          >
-            {!paid || ["Cancelled", "Delivered"].includes(order.status) ? (
-              <p className="text-sm text-muted">
-                {order.tracking ? `${order.tracking.courier} · ${order.tracking.awb}` : order.status === "Cancelled" ? "Cancelled orders aren't shipped." : "Tracking can be added once the order is paid."}
-              </p>
-            ) : (
-              <TrackingForm key={order.tracking?.awb ?? "none"} detail={data} onSaved={replace} disabled={!canWrite} />
             )}
           </Panel>
 
@@ -397,6 +377,18 @@ export function OrderDetailView({ id }: { id: string }) {
           </Panel>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmStatus !== null}
+        onClose={() => setConfirmStatus(null)}
+        title={`Mark order ${order.id} as ${confirmStatus}?`}
+        description="The customer will see this on their order tracking page. Status moves can't be undone."
+        confirmLabel={`Mark as ${confirmStatus}`}
+        destructive={false}
+        onConfirm={() => {
+          if (confirmStatus) void changeStatus(confirmStatus, `Order marked as ${confirmStatus}`);
+        }}
+      />
 
       <ConfirmDialog
         open={confirmCancel}

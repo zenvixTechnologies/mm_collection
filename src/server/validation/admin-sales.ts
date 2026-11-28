@@ -46,6 +46,7 @@ export const ADMIN_ORDER_STATUS = [
   "Order Placed",
   "Confirmed",
   "Processing",
+  "Packed",
   "Shipped",
   "Out for Delivery",
   "Delivered",
@@ -69,7 +70,7 @@ export const bulkOrderStatusBody = z.object({
     .array(z.string().trim().toUpperCase().regex(/^MM[A-Z0-9]{4,12}$/, "Invalid order number."))
     .min(1, "Select at least one order.")
     .max(50, "Update at most 50 orders at a time."),
-  status: z.enum(["Confirmed", "Processing", "Shipped", "Out for Delivery", "Delivered"]),
+  status: z.enum(["Confirmed", "Processing", "Packed", "Shipped", "Out for Delivery", "Delivered"]),
 });
 
 export const orderNumberParams = z.object({
@@ -81,19 +82,8 @@ export const orderNumberParams = z.object({
 });
 
 export const orderStatusBody = z.object({
-  status: z.enum(["Confirmed", "Processing", "Shipped", "Out for Delivery", "Delivered", "Cancelled"]),
+  status: z.enum(["Confirmed", "Processing", "Packed", "Shipped", "Out for Delivery", "Delivered", "Cancelled"]),
   note: text(500).optional().default(""),
-});
-
-export const trackingBody = z.object({
-  courier: text(80).min(2, "Enter the courier name."),
-  awb: text(60)
-    .min(3, "Enter the tracking number.")
-    .regex(/^[A-Za-z0-9-]+$/, "Tracking numbers use letters, numbers and hyphens only."),
-  url: z
-    .union([z.literal(""), z.url("Enter a full tracking URL (https://…).").max(300)])
-    .optional()
-    .refine((u) => !u || u.startsWith("https://"), "Tracking links must use https://."),
 });
 
 export const orderNoteBody = z.object({ text: text(2000).min(1, "Write a note first.") });

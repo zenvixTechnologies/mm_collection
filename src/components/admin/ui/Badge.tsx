@@ -30,6 +30,7 @@ const ORDER_TONE: Record<AdminOrderStatus, BadgeTone> = {
   "Order Placed": "gold",
   Confirmed: "neutral",
   Processing: "neutral",
+  Packed: "neutral",
   Shipped: "accent",
   "Out for Delivery": "accent",
   Delivered: "success",

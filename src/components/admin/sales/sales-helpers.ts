@@ -1,9 +1,18 @@
 import type { OrderStatus, StoreOrder } from "@/types";
 import { ORDER_STATUSES } from "@/types";
+import { timelineSteps } from "@/lib/shipment";
 import type { AdminOrder, AdminOrderStatus } from "@/types/admin";
 
 /** Every status an admin can filter by, in lifecycle order. */
-export const ADMIN_ORDER_STATUSES: AdminOrderStatus[] = ["Payment Pending", ...ORDER_STATUSES, "Cancelled", "Payment Failed", "Expired"];
+export const ADMIN_ORDER_STATUSES: AdminOrderStatus[] = [
+  "Payment Pending",
+  ...ORDER_STATUSES.slice(0, 3),
+  "Packed",
+  ...ORDER_STATUSES.slice(3),
+  "Cancelled",
+  "Payment Failed",
+  "Expired",
+];
 
 /**
  * View an admin order through the storefront's order type so the existing order components
@@ -11,7 +20,7 @@ export const ADMIN_ORDER_STATUSES: AdminOrderStatus[] = ["Payment Pending", ...O
  * A cancelled order is shown at the last delivery status it actually reached.
  */
 export function toStoreOrder(o: AdminOrder): StoreOrder {
-  const reached = ORDER_STATUSES.filter((s) => o.history[s]);
+  const reached = timelineSteps(o).filter((s) => o.history[s]);
   const status = o.status === "Cancelled" && reached.length ? reached[reached.length - 1] : o.status;
   const history: StoreOrder["history"] = {};
   for (const [s, at] of Object.entries(o.history)) if (at) history[s as AdminOrderStatus] = at;

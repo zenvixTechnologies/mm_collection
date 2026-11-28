@@ -77,6 +77,12 @@ const ProductSchema = new Schema(
     featured: { type: Boolean, default: false },
     newArrival: { type: Boolean, default: false },
     bestSeller: { type: Boolean, default: false },
+    /** Rating summary of verified reviews. Written only by the review service. */
+    reviewStats: {
+      average: { type: Number, min: 0, max: 5, default: 0 },
+      count: { type: Number, min: 0, default: 0 },
+    },
+    /** Legacy sample figures imported with the catalogue — not from real reviews. Kept, never read. */
     rating: {
       average: { type: Number, min: 0, max: 5, default: 0 },
       count: { type: Number, min: 0, default: 0 },

@@ -51,6 +51,5 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<SystemRole, readonly Permission[]>
     "orders:read",
     "orders:write",
     "customers:read",
-    "reviews:moderate",
   ],
 };

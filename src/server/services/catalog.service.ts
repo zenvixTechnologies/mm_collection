@@ -62,7 +62,7 @@ export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
  * change calls revalidateTag(CATALOG_TAG). Stock shown here may lag slightly; checkout always
  * re-reads live stock from the database.
  */
-export const getCatalogSnapshot = unstable_cache(loadCatalogSnapshot, ["catalog-snapshot-v1"], {
+export const getCatalogSnapshot = unstable_cache(loadCatalogSnapshot, ["catalog-snapshot-v2"], {
   tags: [CATALOG_TAG],
   revalidate: 300,
 });
@@ -79,7 +79,7 @@ const SORTS: Record<NonNullable<ProductListQuery["sort"]>, Record<string, SortOr
   "price-asc": { inStock: -1, pricePaise: 1, _id: 1 },
   "price-desc": { inStock: -1, pricePaise: -1, _id: 1 },
   "best-selling": { inStock: -1, soldCount: -1, _id: 1 },
-  rating: { inStock: -1, "rating.average": -1, "rating.count": -1, _id: 1 },
+  rating: { inStock: -1, "reviewStats.average": -1, "reviewStats.count": -1, _id: 1 },
   relevance: { score: { $meta: "textScore" }, inStock: -1, soldCount: -1 },
 };
 

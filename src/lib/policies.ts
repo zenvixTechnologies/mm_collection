@@ -8,6 +8,11 @@ import type { Product } from "@/types";
 export const UNDERGARMENT_RETURN_POLICY =
   "For hygiene and safety reasons, undergarments are non-returnable and non-exchangeable.";
 
+/** From the Return & Refund Policy: returns within this many days of delivery… */
+export const RETURN_WINDOW_DAYS = 7;
+/** …and damaged or wrong items reported within this many hours. */
+export const DAMAGE_CLAIM_HOURS = 48;
+
 export type DeliveryZone = { region: string; minDays: number; maxDays: number };
 
 export const DELIVERY_ZONES: DeliveryZone[] = [
@@ -33,4 +38,9 @@ const UNDERGARMENT_PATTERN =
 
 export function isUndergarment(product: Pick<Product, "name" | "categoryId">) {
   return UNDERGARMENT_CATEGORY_IDS.includes(product.categoryId) || UNDERGARMENT_PATTERN.test(product.name);
+}
+
+/** The policy excludes nightwear from returns; matched by category or by the word in the name. */
+export function isNightwear(name: string, categorySlugs: string[]) {
+  return categorySlugs.some((s) => /night-?wear|sleep-?wear/i.test(s)) || /\b(night ?wear|sleep ?wear|night ?suit|nighty|nightie|night ?dress|pyjamas?|pajamas?)\b/i.test(name);
 }

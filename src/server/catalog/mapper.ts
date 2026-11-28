@@ -36,7 +36,7 @@ export interface ProductLean {
   featured?: boolean | null;
   newArrival?: boolean | null;
   bestSeller?: boolean | null;
-  rating?: { average?: number | null; count?: number | null } | null;
+  reviewStats?: { average?: number | null; count?: number | null } | null;
   soldCount?: number | null;
   shipping?: { weightGrams?: number | null; lengthCm?: number | null; widthCm?: number | null; heightCm?: number | null } | null;
   publishedAt?: Date | null;
@@ -55,7 +55,7 @@ export interface CategoryLean {
 /** Fields the storefront needs — keeps list queries light. */
 export const PRODUCT_PUBLIC_PROJECTION = {
   legacyId: 1, slug: 1, name: 1, sku: 1, audience: 1, category: 1, tags: 1, shortDescription: 1, description: 1,
-  images: 1, variants: 1, fabric: 1, care: 1, featured: 1, newArrival: 1, bestSeller: 1, rating: 1, soldCount: 1,
+  images: 1, variants: 1, fabric: 1, care: 1, featured: 1, newArrival: 1, bestSeller: 1, reviewStats: 1, soldCount: 1,
   shipping: 1, publishedAt: 1, createdAt: 1,
 } as const;
 
@@ -107,8 +107,8 @@ export function toStoreProduct(p: ProductLean, slugOf: (id: Types.ObjectId) => s
     sizes,
     colors,
     stock,
-    rating: p.rating?.average ?? 0,
-    reviewCount: p.rating?.count ?? 0,
+    rating: p.reviewStats?.average ?? 0,
+    reviewCount: p.reviewStats?.count ?? 0,
     featured: !!p.featured,
     newArrival: !!p.newArrival,
     bestSeller: !!p.bestSeller,

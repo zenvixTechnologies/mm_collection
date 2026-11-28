@@ -61,7 +61,8 @@ export default async function ProductPage({ params }: Params) {
     image: product.images.map((i) => `${i}&w=1200`),
     description: product.description,
     brand: { "@type": "Brand", name: SITE.name, logo: `${SITE.url}/brand/logo-512.png` },
-    aggregateRating: { "@type": "AggregateRating", ratingValue: product.rating, reviewCount: product.reviewCount },
+    // Published only when verified reviews exist.
+    ...(product.reviewCount > 0 && { aggregateRating: { "@type": "AggregateRating", ratingValue: product.rating, reviewCount: product.reviewCount } }),
     offers: {
       "@type": "Offer",
       priceCurrency: "INR",

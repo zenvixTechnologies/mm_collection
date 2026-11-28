@@ -12,6 +12,7 @@ import { formatDate, formatPrice } from "@/lib/utils";
 import { useAdminSession } from "@/store/admin-store";
 import { toast } from "@/store/ui-store";
 import { OrderStatusBadge, PaymentStatusBadge } from "../ui/Badge";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { downloadCsv } from "../ui/csv";
 import { DataTable, TableEmpty, type Column, type SortState } from "../ui/DataTable";
 import { PageHeader } from "../ui/PageHeader";
@@ -24,7 +25,9 @@ type RangeFilter = "all" | "7" | "30" | "90";
 type OrderPage = AdminPage<AdminOrder> & { counts: Partial<Record<StatusTab, number>>; revenue: number };
 
 const PAGE_SIZE = 20;
-const BULK_STATUSES = ["Confirmed", "Processing", "Shipped", "Out for Delivery", "Delivered"] as const;
+const BULK_STATUSES = ["Confirmed", "Processing", "Packed", "Shipped", "Out for Delivery", "Delivered"] as const;
+/** Bulk moves customers see as shipping milestones are confirmed first. */
+const CONFIRM_BULK: readonly string[] = ["Shipped", "Out for Delivery", "Delivered"];
 
 const daysAgo = (days: string) => (days === "all" ? "" : new Date(Date.now() - Number(days) * 86_400_000).toISOString().slice(0, 10));
 
@@ -41,6 +44,7 @@ export function OrdersView() {
   const [selected, setSelected] = useState<string[]>([]);
   const [bulkStatus, setBulkStatus] = useState<(typeof BULK_STATUSES)[number]>("Confirmed");
   const [busy, setBusy] = useState<"bulk" | "export" | null>(null);
+  const [confirmBulk, setConfirmBulk] = useState<string[] | null>(null);
 
   const term = useDebounced(q.trim());
   const filters = {
@@ -181,7 +185,7 @@ export function OrdersView() {
       <PageHeader
         breadcrumbs={[{ label: "Orders" }]}
         title="Orders"
-        description="Confirm, pack and ship orders, and keep customers updated with tracking."
+        description="Confirm, pack and ship orders, and keep customers updated on order status."
         actions={
           <button type="button" className="btn-outline btn-sm" disabled={busy === "export" || !data?.total} onClick={() => void exportCsv()}>
             {busy === "export" ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <Download size={15} aria-hidden />} Export CSV
@@ -259,7 +263,15 @@ export function OrdersView() {
                     <option key={s}>{s}</option>
                   ))}
                 </select>
-                <button type="button" className="btn-primary btn-sm min-h-8" disabled={busy === "bulk"} onClick={() => void applyBulk(ids)}>
+                <button
+                  type="button"
+                  className="btn-primary btn-sm min-h-8"
+                  disabled={busy === "bulk"}
+                  onClick={() => {
+                    if (CONFIRM_BULK.includes(bulkStatus)) setConfirmBulk(ids);
+                    else void applyBulk(ids);
+                  }}
+                >
                   {busy === "bulk" && <Loader2 size={14} className="animate-spin" aria-hidden />} Apply
                 </button>
               </>
@@ -268,6 +280,18 @@ export function OrdersView() {
           />
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmBulk !== null}
+        onClose={() => setConfirmBulk(null)}
+        title={`Move ${confirmBulk?.length ?? 0} order${confirmBulk?.length === 1 ? "" : "s"} to ${bulkStatus}?`}
+        description="Customers will see this on their order tracking page. Status moves can't be undone. Orders that can't make this move are skipped."
+        confirmLabel={`Move to ${bulkStatus}`}
+        destructive={false}
+        onConfirm={() => {
+          if (confirmBulk) void applyBulk(confirmBulk);
+        }}
+      />
     </>
   );
 }

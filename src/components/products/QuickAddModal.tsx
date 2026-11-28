@@ -48,7 +48,7 @@ function QuickAddBody({ product, onDone }: { product: Product; onDone: () => voi
           </div>
           <div>
             <h3 className="text-lg leading-snug font-semibold">{product.name}</h3>
-            <Rating value={product.rating} count={product.reviewCount} className="mt-1" size={13} />
+            {product.reviewCount > 0 && <Rating value={product.rating} count={product.reviewCount} className="mt-1" size={13} />}
             <Price price={product.price} originalPrice={product.originalPrice} discount={product.discount} className="mt-2" />
           </div>
         </div>

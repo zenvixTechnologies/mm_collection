@@ -27,7 +27,6 @@ import { POST as bulkRoute } from "@/app/api/v1/admin/orders/bulk-status/route";
 import { POST as noteRoute } from "@/app/api/v1/admin/orders/[id]/notes/route";
 import { GET as getOrderRoute } from "@/app/api/v1/admin/orders/[id]/route";
 import { PATCH as orderStatusRoute } from "@/app/api/v1/admin/orders/[id]/status/route";
-import { PUT as trackingRoute } from "@/app/api/v1/admin/orders/[id]/tracking/route";
 import { GET as listOrdersRoute } from "@/app/api/v1/admin/orders/route";
 import { DEFAULT_ROLE_PERMISSIONS } from "@/server/auth/permissions";
 import { hashPassword } from "@/server/auth/password";
@@ -262,7 +261,6 @@ describe("admin orders", () => {
   const setStock = (stock: number, reserved = 0) => Product.updateOne({ _id: productId }, { $set: { "variants.0.stock": stock, "variants.0.reserved": reserved, soldCount: 5 } });
   const status = (id: string, body: Record<string, unknown>, as: As = "owner") =>
     call(orderStatusRoute(req(`/api/v1/admin/orders/${id}/status`, { method: "PATCH", body, as }), p({ id })));
-  const tracking = (id: string, body: Record<string, unknown>) => call(trackingRoute(req(`/api/v1/admin/orders/${id}/tracking`, { method: "PUT", body }), p({ id })));
 
   beforeEach(async () => {
     await Promise.all([models.InventoryMovement.deleteMany({}), models.Payment.deleteMany({}), models.CouponRedemption.deleteMany({})]);
@@ -322,23 +320,18 @@ describe("admin orders", () => {
     expect(confirmed.body.data.order.timeline.at(-1)).toMatchObject({ status: "Confirmed", by: "owner admin", note: "Packed today" });
     expect(confirmed.body.data.order.allowedTransitions).toEqual(["Processing", "Shipped", "Cancelled"]);
 
-    expect((await status(id, { status: "Shipped" })).status).toBe(400); // needs tracking first
-    expect((await tracking(id, { courier: "Delhivery", awb: "DL 123" })).status).toBe(400);
-    expect((await tracking(id, { courier: "Delhivery", awb: "DL123", url: "http://insecure.example/x" })).status).toBe(400);
-    expect((await tracking(id, { courier: "Delhivery", awb: "dl123456", url: "https://track.example/dl123456" })).body.data.order.tracking).toMatchObject({ courier: "Delhivery", awb: "DL123456" });
-    const shipped = await status(id, { status: "Shipped" });
-    expect(shipped.body.data.order.tracking.shippedAt).toBeTruthy();
+    const shipped = await status(id, { status: "Shipped" }); // no courier details needed
+    expect(shipped.status).toBe(200);
+    expect(shipped.body.data.order.status).toBe("Shipped");
     expect((await status(id, { status: "Cancelled" })).status).toBe(409); // too late to cancel
     expect((await status(id, { status: "Delivered" })).status).toBe(200);
     expect((await status(id, { status: "Out for Delivery" })).status).toBe(409); // never backwards
 
     expect(await AuditLog.countDocuments({ action: "order.status", "entity.id": id })).toBe(3);
-    expect(await AuditLog.countDocuments({ action: "order.tracking", "entity.id": id })).toBe(1);
     expect((await Order.findById(o._id).lean())!.paymentStatus).toBe("captured");
 
     const unpaid = await makeOrder({ status: "pending_payment", paymentStatus: "pending" });
     expect((await status(unpaid.orderNumber, { status: "Confirmed" })).status).toBe(409);
-    expect((await tracking(unpaid.orderNumber, { courier: "Delhivery", awb: "DL1" })).status).toBe(409);
   });
 
   it("cancelling a paid, unshipped order puts its units back in stock exactly once", async () => {
@@ -967,12 +960,5 @@ describe("admin store settings", () => {
     for (const list of [[{ ...couriers[0], enabled: false }], [{ ...couriers[0], trackingUrlTemplate: "https://track.example/no-placeholder" }], [{ ...couriers[0], trackingUrlTemplate: "http://track.example/{awb}" }], [], [couriers[0], couriers[0]]]) {
       expect((await patchShipping({ deliveryEstimate: "3–7 days", dispatchTime: "1–2 days", couriers: list })).status, JSON.stringify(list)).toBe(400);
     }
-  });
-
-  it("couriers saved here are offered when adding tracking to an order", async () => {
-    await patchShipping({ deliveryEstimate: "3–7 days", dispatchTime: "1–2 days", couriers });
-    const o = await makeOrder();
-    const detail = await call(getOrderRoute(req(`/api/v1/admin/orders/${o.orderNumber}`), p({ id: o.orderNumber })));
-    expect(detail.body.data.couriers).toEqual([{ name: "Delhivery", trackingUrlTemplate: "https://www.delhivery.com/track/package/{awb}" }]);
   });
 });

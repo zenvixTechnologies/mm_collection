@@ -62,11 +62,25 @@ Payments use **Razorpay Standard Checkout** with UPI, Indian debit/credit cards 
    - URL: `https://<your-domain>/api/v1/payments/razorpay/webhook` (Razorpay can't reach
      `localhost`; use your deployed preview URL or a tunnel for local testing).
    - Secret: a long random string — put the same value in `RAZORPAY_WEBHOOK_SECRET`.
-   - Active events: `payment.captured`, `payment.authorized`, `payment.failed`, `order.paid`.
+   - Active events: `payment.captured`, `payment.authorized`, `payment.failed`, `order.paid`,
+     `refund.created`, `refund.processed`, `refund.failed`.
 3. **Payment methods** — keep international payments disabled; wallets, EMI and pay-later are
    hidden in Checkout and rejected on the server.
-4. **Expiry cron** — call `GET /api/v1/cron/expire-orders` with `Authorization: Bearer $CRON_SECRET`
-   every few minutes (Vercel Cron on a paid plan, or any external scheduler).
+4. **Expiry and refund-retry cron** — `GET /api/v1/cron/expire-orders` with
+   `Authorization: Bearer $CRON_SECRET` releases expired unpaid orders (up to 100 a run, asking
+   Razorpay first) and retries saved early refunds.
+   - Set `CRON_SECRET` in Vercel → Project → Settings → Environment Variables (Production): a random
+     string of at least 16 letters and numbers. Vercel Cron sends that header by itself. A deployment
+     keeps the value it was built with, so **redeploy** after adding or changing it. Without it the
+     route answers 503 and does nothing.
+   - `vercel.json` runs it **once a day** (20:30 UTC = 02:00 IST), which every Vercel plan accepts.
+     That is the minimum, not the target: aim for every 10 minutes. On Pro, change its schedule to
+     `*/10 * * * *` (on Hobby that schedule makes the deployment **fail**). On Hobby, keep the daily
+     entry and have an external scheduler send the same request and header every 10 minutes.
+   - Vercel runs cron jobs only on Production deployments, doesn't retry a failed run, and may
+     occasionally deliver one twice or overlap runs (the job is safe either way). Check Vercel →
+     Settings → Cron Jobs and the logs (`cron.expire_orders`) after deploying.
+   - Saved refund events are deleted after 90 days, even if never applied.
 5. **Test a payment** — place an order on the storefront and pay with Razorpay's
    [test card / UPI details](https://razorpay.com/docs/payments/payments/test-card-details/) (Test
    Mode never moves real money). Check the order shows *Order Placed* and the stock moved from
