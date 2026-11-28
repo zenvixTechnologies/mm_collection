@@ -91,7 +91,7 @@ export async function confirmUpload(publicId: string, actor: AuditActor) {
 /** True if any product, category, banner or review still uses this image. */
 async function isReferenced(publicId: string) {
   const [p, c, b, r] = await Promise.all([
-    Product.exists({ "images.publicId": publicId }),
+    Product.exists({ $or: [{ "images.publicId": publicId }, { "colorImages.images.publicId": publicId }] }),
     Category.exists({ "image.publicId": publicId }),
     HomepageBanner.exists({ "image.publicId": publicId }),
     Review.exists({ "images.publicId": publicId }),

@@ -7,6 +7,9 @@ const list = z
   .union([z.string(), z.array(z.string())])
   .transform((v) => (Array.isArray(v) ? v : v.split(",")).map((s) => s.trim()).filter(Boolean).slice(0, 30));
 
+/** One or more category slugs: `a,b` or repeated keys. */
+const slugList = list.pipe(z.array(slug).max(30));
+
 const rupees = z.coerce.number().int().min(0).max(10_000_000);
 
 export const PRODUCT_SORTS = ["featured", "newest", "price-asc", "price-desc", "best-selling", "rating", "relevance"] as const;
@@ -15,7 +18,11 @@ export const PRODUCT_SORTS = ["featured", "newest", "price-asc", "price-desc", "
 export const productListQuery = pagination.extend({
   q: z.string().trim().min(2).max(100).optional(),
   audience: z.enum(AUDIENCES).optional(),
-  category: slug.optional(),
+  category: slugList.optional(),
+  /** Search within a listing: every word must start a word of the product's name, category, colour, fabric… */
+  search: z.string().trim().max(100).optional(),
+  /** Also return the filter options for this listing. */
+  facets: queryBoolean.optional(),
   minPrice: rupees.optional(),
   maxPrice: rupees.optional(),
   minDiscount: z.coerce.number().int().min(0).max(100).optional(),

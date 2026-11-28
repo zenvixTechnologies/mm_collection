@@ -37,6 +37,7 @@ export interface ProductLean {
   newArrival?: boolean | null;
   bestSeller?: boolean | null;
   reviewStats?: { average?: number | null; count?: number | null } | null;
+  colorImages?: { color: string; images?: { url: string }[] | null }[] | null;
   soldCount?: number | null;
   shipping?: { weightGrams?: number | null; lengthCm?: number | null; widthCm?: number | null; heightCm?: number | null } | null;
   publishedAt?: Date | null;
@@ -55,7 +56,7 @@ export interface CategoryLean {
 /** Fields the storefront needs — keeps list queries light. */
 export const PRODUCT_PUBLIC_PROJECTION = {
   legacyId: 1, slug: 1, name: 1, sku: 1, audience: 1, category: 1, tags: 1, shortDescription: 1, description: 1,
-  images: 1, variants: 1, fabric: 1, care: 1, featured: 1, newArrival: 1, bestSeller: 1, reviewStats: 1, soldCount: 1,
+  images: 1, variants: 1, fabric: 1, care: 1, featured: 1, newArrival: 1, bestSeller: 1, reviewStats: 1, colorImages: 1, soldCount: 1,
   shipping: 1, publishedAt: 1, createdAt: 1,
 } as const;
 
@@ -104,9 +105,15 @@ export function toStoreProduct(p: ProductLean, slugOf: (id: Types.ObjectId) => s
     price: toRupees(price),
     discount: mrp > price ? Math.round(((mrp - price) / mrp) * 100) : 0,
     images: (p.images ?? []).map((i) => i.url),
+    // Only colours on sale, listed under the name the picker uses.
+    colorImages: colors.flatMap((c) => {
+      const own = p.colorImages?.find((g) => g.color.trim().toLowerCase() === c.name.trim().toLowerCase());
+      return own?.images?.length ? [{ color: c.name, images: own.images.map((i) => i.url) }] : [];
+    }),
     sizes,
     colors,
     stock,
+    variants: active.map((v) => ({ size: (v.size || null) as Size | null, color: v.color?.name ?? null, stock: Math.max(0, v.stock - v.reserved) })),
     rating: p.reviewStats?.average ?? 0,
     reviewCount: p.reviewStats?.count ?? 0,
     featured: !!p.featured,

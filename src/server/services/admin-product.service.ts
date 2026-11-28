@@ -25,6 +25,7 @@ interface AdminProductLean extends ProductLean {
   status: ProductStatus;
   updatedAt: Date;
   images?: { url: string; publicId?: string | null; width?: number | null; height?: number | null; alt?: string | null }[];
+  colorImages?: { color: string; images?: NonNullable<AdminProductLean["images"]> }[] | null;
   variants: (ProductLean["variants"][number] & { lowStockThreshold?: number | null })[];
 }
 
@@ -61,7 +62,11 @@ export function toAdminProduct(doc: AdminProductLean, slugOf: SlugOf): AdminProd
     status: doc.status,
     updatedAt: doc.updatedAt.toISOString(),
     variants,
-    imageMeta: (doc.images ?? []).map((i) => ({ url: i.url, publicId: i.publicId ?? null, width: i.width ?? null, height: i.height ?? null, alt: i.alt ?? "" })),
+    // Every saved colour gallery, including hidden colours': re-adding one shows its photos again,
+    // instead of saving over them with nothing.
+    colorImages: (doc.colorImages ?? []).flatMap((g) => (g.images?.length ? [{ color: g.color, images: g.images.map((i) => i.url) }] : [])),
+    // General photos first, then colour photos, so the form can send each one's Cloudinary ID back.
+    imageMeta: [...(doc.images ?? []), ...(doc.colorImages ?? []).flatMap((g) => g.images ?? [])].map((i) => ({ url: i.url, publicId: i.publicId ?? null, width: i.width ?? null, height: i.height ?? null, alt: i.alt ?? "" })),
   };
 }
 
@@ -125,6 +130,29 @@ function generatedSku(productSku: string, size: string | null, color: { name: st
   return [productSku, size && skuCode(size), color && skuCode(color.name)].filter(Boolean).join("-");
 }
 
+const storedImages = (images: ProductBody["images"], alt: string) =>
+  images.map((i) => ({ url: i.url, publicId: i.publicId ?? undefined, width: i.width ?? undefined, height: i.height ?? undefined, alt: i.alt ?? alt }));
+
+const colorKey = (name: string) => name.trim().toLowerCase();
+
+/**
+ * The colour galleries to store. Offered colours take exactly what was sent (an omitted or empty
+ * list means "no photos"). A colour no longer offered keeps its saved photos, like its variants,
+ * so nothing is deleted just because a colour was hidden.
+ */
+function colorGalleries(body: ProductBody, saved: { color: string; images: ProductBody["images"] }[]) {
+  const offered = new Map(body.variants.flatMap((v) => (v.color ? [[colorKey(v.color.name), v.color.name] as const] : [])));
+  const sent = [...offered].flatMap(([key, name]) => {
+    const gallery = body.colorImages?.find((g) => colorKey(g.color) === key);
+    return gallery?.images.length ? [{ color: name, images: storedImages(gallery.images, `${body.name}, ${name}`) }] : [];
+  });
+  return [...saved.filter((g) => !offered.has(colorKey(g.color))), ...sent];
+}
+
+/** Cloudinary IDs of every photo a product refers to. */
+const productImageIds = (doc: { images: { publicId?: string | null }[]; colorImages?: { images: { publicId?: string | null }[] }[] | null }) =>
+  [...doc.images, ...(doc.colorImages ?? []).flatMap((g) => [...g.images])].map((i) => i.publicId).filter(Boolean) as string[];
+
 function scalarFields(body: ProductBody) {
   return {
     name: body.name,
@@ -133,7 +161,7 @@ function scalarFields(body: ProductBody) {
     audience: body.audience,
     shortDescription: body.shortDescription,
     description: body.description,
-    images: body.images.map((i) => ({ url: i.url, publicId: i.publicId ?? undefined, width: i.width ?? undefined, height: i.height ?? undefined, alt: i.alt ?? body.name })),
+    images: storedImages(body.images, body.name),
     fabric: body.fabric,
     care: body.care,
     status: body.status,
@@ -179,6 +207,7 @@ export async function createProduct(body: ProductBody, actor: AuditActor): Promi
         [
           {
             ...scalarFields(body),
+            colorImages: colorGalleries(body, []),
             category,
             tags,
             variants,
@@ -218,7 +247,7 @@ export async function updateProduct(ref: string, body: ProductBody, actor: Audit
       const cats = await categoryLookup(session);
       const { category, tags } = resolveCategories(body, cats.idOf, cats.audienceOf);
       const before = { status: doc.status, pricePaise: doc.pricePaise, mrpPaise: doc.mrpPaise, name: doc.name };
-      const oldImages = doc.images.map((i) => i.publicId).filter(Boolean) as string[];
+      const oldImages = productImageIds(doc);
 
       const existing = new Map(doc.variants.map((v) => [variantKey(v.size, v.color), v]));
       const seen = new Set<string>();
@@ -253,6 +282,8 @@ export async function updateProduct(ref: string, body: ProductBody, actor: Audit
 
       doc.set({
         ...scalarFields(body),
+        // Absent (an older admin tab, or another caller) leaves the colour photos untouched.
+        ...(body.colorImages && { colorImages: colorGalleries(body, doc.toObject().colorImages as never) }),
         category,
         tags,
         ...(body.weightGrams && { "shipping.weightGrams": body.weightGrams }),
@@ -263,7 +294,7 @@ export async function updateProduct(ref: string, body: ProductBody, actor: Audit
       const ledger = openingMovements(doc._id, added, actor, "Opening stock (new variant)");
       if (ledger.length) await InventoryMovement.insertMany(ledger, { session });
 
-      const keptImages = new Set(body.images.map((i) => i.publicId).filter(Boolean));
+      const keptImages = new Set(productImageIds(doc));
       return { id: doc._id.toString(), before, removedImages: oldImages.filter((p) => !keptImages.has(p)) };
     });
     const product = await getAdminProduct(result.id);
@@ -293,7 +324,7 @@ export async function deleteProducts(refs: string[], actor: AuditActor) {
     return docs.map((d) => ({
       id: publicProductId(d),
       name: d.name,
-      images: d.images.map((i) => i.publicId).filter(Boolean) as string[],
+      images: productImageIds(d),
     }));
   });
   for (const d of result) await audit(actor, "product.delete", { type: "product", id: d.id, label: d.name });

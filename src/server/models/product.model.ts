@@ -51,6 +51,11 @@ const ProductSchema = new Schema(
     description: { type: String, trim: true, maxlength: 5000, default: "" },
     /** Ordered gallery; the first image is the primary one. */
     images: { type: [ImageSchema], default: [] },
+    /** Optional photos per colour (matched to variant colour names); the first is that colour's primary. */
+    colorImages: {
+      type: [new Schema({ color: { type: String, required: true, trim: true, maxlength: 40 }, images: { type: [ImageSchema], default: [] } }, { _id: false })],
+      default: [],
+    },
     variants: {
       type: [VariantSchema],
       validate: [

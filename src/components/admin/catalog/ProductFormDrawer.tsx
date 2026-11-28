@@ -6,11 +6,13 @@ import type { Audience, ProductColor, Size } from "@/types";
 import type { AdminProduct, AdminVariant, ProductStatus } from "@/types/admin";
 import { cn, discountPercent, formatPrice, slugify } from "@/lib/utils";
 import { imageDetails } from "@/lib/admin-upload";
+import { colorGallery } from "@/lib/gallery";
 import { uid, useAdminStore, type ProductPayload } from "@/store/admin-store";
 import { toast } from "@/store/ui-store";
 import { Dialog } from "@/components/ui/Dialog";
 import { FormSection, SelectField, Switch, TextAreaField, TextField } from "../ui/FormControls";
 import { MultiImageUpload } from "../ui/ImageUpload";
+import { ColourPhotos } from "./ColourPhotos";
 import { AUDIENCE_OPTIONS, SIZE_OPTIONS, categoryLabel } from "./catalog-helpers";
 
 function blankProduct(categoryId: string, audience: Audience): AdminProduct {
@@ -122,6 +124,8 @@ function ProductForm({ product, onDone }: { product: AdminProduct | null; onDone
   const [colorName, setColorName] = useState("");
   const [colorHex, setColorHex] = useState("#b3121b");
   const [saving, setSaving] = useState(false);
+  /** Saving waits for uploads, so a photo still on its way isn't silently left out. */
+  const [uploadingColours, setUploadingColours] = useState(false);
   /** Opening stock for new variants and alert levels, keyed by size|colour. */
   const [variantInput, setVariantInput] = useState<Record<string, { initialStock: number; threshold: number }>>({});
   const rows = useMemo(() => variantRows(p), [p]);
@@ -158,6 +162,10 @@ function ProductForm({ product, onDone }: { product: AdminProduct | null; onDone
       care: p.care.map((c) => c.trim()).filter(Boolean),
       discount,
     };
+    if (uploadingColours) {
+      toast.error("Wait for the colour photos to finish uploading.");
+      return;
+    }
     const errs = validate(next, products);
     setErrors(errs);
     if (Object.keys(errs).length) {
@@ -174,6 +182,11 @@ function ProductForm({ product, onDone }: { product: AdminProduct | null; onDone
       shortDescription: next.shortDescription.trim(),
       description: next.description.trim(),
       images: imageDetails(next.images, next.name),
+      // Only the colours the product offers; a removed colour's saved photos stay on the server.
+      colorImages: next.colors.flatMap((c) => {
+        const own = colorGallery(next, c.name);
+        return own.length ? [{ color: c.name, images: imageDetails(own, `${next.name}, ${c.name}`) }] : [];
+      }),
       pricePaise: Math.round(next.price * 100),
       mrpPaise: Math.round(next.originalPrice * 100),
       variants: rows.map((r) => ({
@@ -204,7 +217,7 @@ function ProductForm({ product, onDone }: { product: AdminProduct | null; onDone
   return (
     <form onSubmit={submit()} noValidate className="flex min-h-full flex-col">
       <div className="flex-1 space-y-6 px-5 py-5">
-        <FormSection title="Images" description="The first image is used on product cards.">
+        <FormSection title="Images" description="General product photos. The first is used on product cards, and colours without their own photos show these.">
           <div className="sm:col-span-2">
             <MultiImageUpload images={p.images} onChange={(images) => set("images", images)} altBase={p.name || "Product"} purpose="product" uploadRef={p.slug || undefined} />
             {errors.images && <p className="field-error">{errors.images}</p>}
@@ -388,6 +401,23 @@ function ProductForm({ product, onDone }: { product: AdminProduct | null; onDone
             </div>
           </div>
         </FormSection>
+
+        {p.colors.length > 0 && (
+          <FormSection title="Colour photos" description="Shoppers see a colour's own photos when they choose it. The first photo is that colour's main image.">
+            <div className="sm:col-span-2">
+              <ColourPhotos
+                colors={p.colors}
+                colorImages={p.colorImages ?? []}
+                productName={p.name || "Product"}
+                uploadRef={p.slug || undefined}
+                onChange={(color, images) =>
+                  setP((prev) => ({ ...prev, colorImages: [...(prev.colorImages ?? []).filter((g) => g.color.toLowerCase() !== color.toLowerCase()), ...(images.length ? [{ color, images }] : [])] }))
+                }
+                onBusyChange={setUploadingColours}
+              />
+            </div>
+          </FormSection>
+        )}
 
         <FormSection
           title="Inventory"

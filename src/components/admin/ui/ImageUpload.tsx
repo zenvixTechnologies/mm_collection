@@ -1,8 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { ImagePlus, Loader2, Star, Trash2 } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, ImagePlus, Loader2, Star, Trash2 } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import { errorMessage } from "@/lib/admin-api";
 import { checkFile, uploadImage, type UploadPurpose } from "@/lib/admin-upload";
 import { cn } from "@/lib/utils";
@@ -112,6 +112,8 @@ export function MultiImageUpload({
   altBase,
   purpose = "product",
   uploadRef,
+  reorder = false,
+  onBusyChange,
 }: {
   images: string[];
   onChange: (images: string[]) => void;
@@ -120,8 +122,24 @@ export function MultiImageUpload({
   purpose?: UploadPurpose;
   /** Product slug — uploads are filed in that product's folder. */
   uploadRef?: string;
+  /** Show buttons that move an image earlier or later. */
+  reorder?: boolean;
+  /** Told while uploads are still running. */
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const [uploading, setUploading] = useState(0);
+  const busy = uploading > 0;
+  const report = useRef(onBusyChange);
+  report.current = onBusyChange;
+  useEffect(() => {
+    report.current?.(busy);
+    return () => report.current?.(false);
+  }, [busy]);
+  const move = (from: number, to: number) => {
+    const next = [...images];
+    [next[from], next[to]] = [next[to], next[from]];
+    onChange(next);
+  };
   const remaining = max - images.length - uploading;
   // Keep the latest list for when uploads finish (the user may reorder or remove meanwhile).
   const latest = useRef(images);
@@ -145,7 +163,17 @@ export function MultiImageUpload({
                 Primary
               </span>
             )}
-            <div className="absolute inset-x-1.5 bottom-1.5 flex justify-end gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
+            <div className="absolute inset-x-1.5 bottom-1.5 flex flex-wrap justify-end gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
+              {reorder && i > 0 && (
+                <button type="button" onClick={() => move(i, i - 1)} className="flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-ink shadow" aria-label={`Move ${altBase} image ${i + 1} earlier`}>
+                  <ChevronLeft size={14} />
+                </button>
+              )}
+              {reorder && i < images.length - 1 && (
+                <button type="button" onClick={() => move(i, i + 1)} className="flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-ink shadow" aria-label={`Move ${altBase} image ${i + 1} later`}>
+                  <ChevronRight size={14} />
+                </button>
+              )}
               {i > 0 && (
                 <button
                   type="button"

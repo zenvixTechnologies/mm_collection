@@ -1,23 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { PackageOpen, Search, SearchX, SlidersHorizontal, X } from "lucide-react";
-import { useDeferredValue, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
-import type { Audience, Category, Product } from "@/types";
+import { AlertCircle, PackageOpen, Search, SearchX, SlidersHorizontal, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { Audience, Category } from "@/types";
 import { AUDIENCES, getAudience } from "@/data/audiences";
 import { useCatalog } from "@/components/catalog/CatalogProvider";
 import { categoryFullName } from "@/lib/catalog-query";
-import {
-  EMPTY_FILTERS,
-  applyFilters,
-  countActiveFilters,
-  isSortValue,
-  searchProducts,
-  sortProducts,
-  type Filters,
-  type SortValue,
-} from "@/lib/catalog";
+import { EMPTY_FILTERS, countActiveFilters, type Filters } from "@/lib/catalog";
+import { listingQuery, listingSearch, parseListing, searchText, type ListingScope, type ListingState } from "@/lib/listing";
+import { useListing } from "@/hooks/use-listing";
+import type { InitialListing } from "@/server/services/listing-page";
 import { cn, formatPrice } from "@/lib/utils";
 import { Breadcrumbs, type Crumb } from "@/components/ui/Breadcrumbs";
 import { Dialog } from "@/components/ui/Dialog";
@@ -26,22 +21,18 @@ import { FilterPanel } from "./FilterPanel";
 import { ProductGrid } from "./ProductGrid";
 import { SortSelect } from "./SortSelect";
 
-const PAGE_SIZE = 12;
+/** Typing in the search box is sent once it pauses; every other choice is sent at once. */
+const SEARCH_DELAY_MS = 350;
 
 interface ShopViewProps {
   title: string;
   description?: string;
   breadcrumbs: Crumb[];
-  products: Product[];
-  initialSort?: string;
-  initialCategory?: string;
-  /** When the page itself is a category, don't repeat the category filter. */
-  lockedCategory?: string;
+  /** What this page lists. A sub-category page is locked to its category, so that filter is hidden. */
+  scope: ListingScope;
+  /** The server's answer for the URL the page was opened with. */
+  initial: InitialListing;
   showCategoryNav?: boolean;
-  /** The page belongs to one audience (a collection or one of its sub-categories). */
-  audience?: Audience;
-  /** Pre-select an audience on mixed listings (Shop All, New Arrivals…) — from `?for=`. */
-  initialAudience?: Audience;
   /** Replaces the plain title/description header (collection pages pass a hero banner). */
   hero?: ReactNode;
   /** Show the "search within this listing" box. */
@@ -52,79 +43,72 @@ export function ShopView({
   title,
   description,
   breadcrumbs,
-  products,
-  initialSort,
-  initialCategory,
-  lockedCategory,
+  scope,
+  initial,
   showCategoryNav = true,
-  audience,
-  initialAudience,
   hero,
   searchable = true,
 }: ShopViewProps) {
   const { categories, getCategoriesByAudience } = useCatalog();
-  const [sort, setSort] = useState<SortValue>(isSortValue(initialSort) ? initialSort : "featured");
-  const [filters, setFilters] = useState<Filters>(() => {
-    const cat = categories.find((c) => c.id === initialCategory);
-    const wanted = audience ? undefined : (cat?.audience ?? initialAudience);
-    // Only pre-select an audience this listing actually has (e.g. no Home & Living new arrivals yet).
-    const aud = wanted && products.some((p) => p.audienceCategory === wanted) ? wanted : undefined;
-    return {
-      ...EMPTY_FILTERS,
-      audiences: aud ? [aud] : [],
-      categories: cat && (!aud || cat.audience === aud) ? [cat.id] : [],
-    };
-  });
-  const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query.trim());
-  const [visible, setVisible] = useState(PAGE_SIZE);
+  const pathname = usePathname();
+  // The URL is the only record of the chosen filters, so refresh, sharing and Back/Forward all work.
+  const state = parseListing(useSearchParams(), scope, categories);
+  const { filters, sort } = state;
+  const listing = useListing(initial, listingQuery(state, scope), state.page);
+  const { items, total, facets, pending, loadingMore, error } = listing;
+
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [input, setInput] = useState(state.search);
+  const [syncedSearch, setSyncedSearch] = useState(state.search);
+  if (syncedSearch !== state.search) {
+    // The search changed from outside the box (Back, a chip, "Clear all").
+    setSyncedSearch(state.search);
+    if (searchText(input) !== state.search) setInput(state.search);
+  }
+  const typing = useRef<number>(undefined);
+
+  useEffect(() => {
+    const cancel = () => window.clearTimeout(typing.current);
+    window.addEventListener("popstate", cancel);
+    return () => {
+      window.removeEventListener("popstate", cancel);
+      cancel();
+    };
+  }, []);
+
+  /** Write a change to the URL, starting from what it says right now. */
+  const commit = (change: (current: ListingState) => ListingState, mode: "push" | "replace" = "push") => {
+    const now = new URLSearchParams(window.location.search);
+    const next = change(parseListing(now, scope, categories));
+    const url = pathname + listingSearch(next, scope, now.toString());
+    if (url === window.location.pathname + window.location.search) return;
+    // `null` lets Next.js notice the new URL.
+    window.history[mode === "push" ? "pushState" : "replaceState"](null, "", url);
+  };
+
+  /** A new choice starts again at the first page and takes along whatever is typed in the box. */
+  const update = (next: Filters, search = searchText(input)) => {
+    window.clearTimeout(typing.current);
+    commit((s) => ({ ...s, filters: next, search, page: 1 }));
+  };
+
+  const type = (value: string) => {
+    setInput(value);
+    window.clearTimeout(typing.current);
+    typing.current = window.setTimeout(
+      () => commit((s) => ({ ...s, search: searchText(value), page: 1 }), "replace"),
+      SEARCH_DELAY_MS,
+    );
+  };
 
   // Women / Men / Kids / Home & Living tabs only appear when the listing actually mixes audiences.
-  const audiencesHere = useMemo(
-    () => AUDIENCES.filter((a) => products.some((p) => p.audienceCategory === a.id)),
-    [products],
-  );
-  const showAudienceTabs = !audience && audiencesHere.length > 1;
-  const selectedAudience = audience ?? (filters.audiences.length === 1 ? filters.audiences[0] : undefined);
-
-  // Filter options (sizes, colours, sub-categories) follow the chosen audience.
-  const panelSource = useMemo(
-    () => (filters.audiences.length ? products.filter((p) => filters.audiences.includes(p.audienceCategory)) : products),
-    [products, filters.audiences],
-  );
-  const searched = useMemo(
-    () => (deferredQuery ? searchProducts(deferredQuery, products, categories) : products),
-    [products, deferredQuery, categories],
-  );
-  const results = useMemo(() => sortProducts(applyFilters(searched, filters), sort), [searched, filters, sort]);
+  const audiencesHere = scope.audience ? [] : AUDIENCES.filter((a) => facets.audiences.some((x) => x.id === a.id));
+  const showAudienceTabs = audiencesHere.length > 1;
+  const selectedAudience = scope.audience ?? filters.audiences[0];
+  const mixed = !selectedAudience && facets.audiences.length > 1;
   const activeCount = countActiveFilters(filters);
   const navCategories = selectedAudience ? getCategoriesByAudience(selectedAudience) : [];
-
-  // Keep sort/category/audience in the URL so filtered views can be shared and survive refresh.
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    if (sort === "featured") url.searchParams.delete("sort");
-    else url.searchParams.set("sort", sort);
-    if (!lockedCategory) {
-      if (filters.categories.length === 1) url.searchParams.set("category", filters.categories[0]);
-      else url.searchParams.delete("category");
-    }
-    if (!audience) {
-      if (filters.audiences.length === 1) url.searchParams.set("for", filters.audiences[0]);
-      else url.searchParams.delete("for");
-    }
-    window.history.replaceState(window.history.state, "", url.toString());
-  }, [sort, filters.categories, filters.audiences, lockedCategory, audience]);
-
-  const update = (f: Filters) => {
-    startTransition(() => {
-      setFilters(f);
-      setVisible(PAGE_SIZE);
-    });
-  };
+  const lockedCategory = scope.category;
 
   /** Switching audience drops sub-category filters that belong to another audience. */
   const pickAudience = (a: Audience | null) =>
@@ -137,21 +121,17 @@ export function ShopView({
     });
 
   const clearAll = () => {
-    update(EMPTY_FILTERS);
-    setQuery("");
+    setInput("");
+    update(EMPTY_FILTERS, "");
   };
 
   const chips = buildChips(filters, categories);
-  const shown = results.slice(0, visible);
-
-  const loadMore = () => {
-    setLoadingMore(true);
-    // Brief skeleton so new rows don't pop in abruptly.
-    window.setTimeout(() => {
-      setVisible((v) => v + PAGE_SIZE);
-      setLoadingMore(false);
-    }, 350);
-  };
+  const emptyListing = !pending && !error && total === 0 && activeCount === 0 && !state.search;
+  const loadMore = () => commit((s) => ({ ...s, page: listing.pages + 1 }), "replace");
+  const panel = (
+    <FilterPanel filters={filters} onChange={(f) => update(f)} options={facets} mixed={mixed} hideCategory={!!lockedCategory} />
+  );
+  const resultsLabel = pending ? "Updating…" : `${total} ${total === 1 ? "result" : "results"}`;
 
   return (
     <div className="container-page pt-6 pb-10 lg:pt-8">
@@ -219,7 +199,7 @@ export function ShopView({
         </nav>
       )}
 
-      {products.length === 0 ? (
+      {emptyListing ? (
         // A brand-new collection or category with nothing published yet — not a "no matches" state.
         <div className="flex flex-col items-center rounded-2xl bg-canvas px-6 py-16 text-center">
           <PackageOpen size={36} className="text-accent" aria-hidden />
@@ -244,7 +224,7 @@ export function ShopView({
                   </button>
                 )}
               </div>
-              <FilterPanel filters={filters} onChange={update} source={panelSource} hideCategory={!!lockedCategory} />
+              {panel}
             </div>
           </aside>
 
@@ -258,11 +238,9 @@ export function ShopView({
                 <input
                   id="shop-search"
                   type="search"
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setVisible(PAGE_SIZE);
-                  }}
+                  value={input}
+                  maxLength={100}
+                  onChange={(e) => type(e.target.value)}
                   placeholder={`Search in ${title}…`}
                   autoComplete="off"
                   className="field-input h-12 rounded-full pr-4 pl-11 text-[15px]"
@@ -273,7 +251,15 @@ export function ShopView({
             {/* Toolbar */}
             <div className="sticky top-16 z-20 -mx-4 mb-5 flex items-center justify-between gap-3 border-b border-line bg-white/95 px-4 py-3 backdrop-blur lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0 lg:pt-0 lg:backdrop-blur-none">
               <p id="results-heading" className="text-sm text-muted" aria-live="polite">
-                <strong className="text-ink">{results.length}</strong> {results.length === 1 ? "product" : "products"}
+                {pending ? (
+                  "Updating…"
+                ) : error?.stale ? (
+                  "Not updated"
+                ) : (
+                  <>
+                    <strong className="text-ink">{total}</strong> {total === 1 ? "product" : "products"}
+                  </>
+                )}
               </p>
               <div className="flex items-center gap-2">
                 <button
@@ -289,20 +275,23 @@ export function ShopView({
                     </span>
                   )}
                 </button>
-                <SortSelect value={sort} onChange={(v) => startTransition(() => setSort(v))} />
+                <SortSelect value={sort} onChange={(v) => commit((s) => ({ ...s, sort: v, page: 1 }))} />
               </div>
             </div>
 
-            {(chips.length > 0 || deferredQuery) && (
+            {(chips.length > 0 || state.search) && (
               <div className="mb-5 flex flex-wrap items-center gap-2">
-                {deferredQuery && (
+                {state.search && (
                   <button
                     type="button"
-                    onClick={() => setQuery("")}
+                    onClick={() => {
+                      setInput("");
+                      update(filters, "");
+                    }}
                     className="flex items-center gap-1.5 rounded-full bg-sand px-3 py-1.5 text-[13px] text-ink transition-colors hover:bg-line"
-                    aria-label={`Clear search ${deferredQuery}`}
+                    aria-label={`Clear search ${state.search}`}
                   >
-                    &ldquo;{deferredQuery}&rdquo;
+                    &ldquo;{state.search}&rdquo;
                     <X size={13} />
                   </button>
                 )}
@@ -324,34 +313,50 @@ export function ShopView({
               </div>
             )}
 
-            <div className={cn("transition-opacity duration-200", isPending && "opacity-60")}>
-              {results.length ? (
+            <div className={cn("transition-opacity duration-200", pending && "opacity-60")} aria-busy={pending || loadingMore}>
+              {error?.stale ? (
+                <div role="alert" className="flex flex-col items-center rounded-2xl bg-canvas px-6 py-16 text-center">
+                  <AlertCircle size={36} className="text-accent" aria-hidden />
+                  <h2 className="mt-4 text-xl font-semibold">We couldn&apos;t load these products</h2>
+                  <p className="mt-1 max-w-sm text-sm text-muted">{error.message}</p>
+                  <button type="button" onClick={listing.retry} className="btn-primary mt-6">
+                    Try again
+                  </button>
+                </div>
+              ) : items.length ? (
                 <>
-                  <ProductGrid products={shown} priorityCount={4} columns="wide" />
+                  <ProductGrid products={items} priorityCount={4} columns="wide" />
                   {loadingMore && (
                     <div className="mt-8">
                       <ProductGridSkeleton count={4} />
                     </div>
                   )}
-                  {visible < results.length && !loadingMore && (
+                  {!pending && !loadingMore && items.length < total && (
                     <div className="mt-12 flex flex-col items-center gap-3">
                       <p className="text-sm text-muted">
-                        Showing {shown.length} of {results.length}
+                        Showing {items.length} of {total}
                       </p>
                       <div className="h-1 w-48 overflow-hidden rounded-full bg-line" aria-hidden>
-                        <div className="h-full bg-ink" style={{ width: `${(shown.length / results.length) * 100}%` }} />
+                        <div className="h-full bg-ink" style={{ width: `${(items.length / total) * 100}%` }} />
                       </div>
-                      <button type="button" onClick={loadMore} className="btn-outline mt-2 px-10">
-                        Load more
+                      {error && (
+                        <p role="alert" className="text-sm text-accent">
+                          {error.message}
+                        </p>
+                      )}
+                      <button type="button" onClick={error ? listing.retry : loadMore} className="btn-outline mt-2 px-10">
+                        {error ? "Try again" : "Load more"}
                       </button>
                     </div>
                   )}
                 </>
+              ) : pending ? (
+                <ProductGridSkeleton />
               ) : (
                 <div className="flex flex-col items-center rounded-2xl bg-canvas px-6 py-16 text-center">
                   <SearchX size={36} className="text-accent" />
                   <h2 className="mt-4 text-xl font-semibold">
-                    {deferredQuery ? <>Nothing here matches &ldquo;{deferredQuery}&rdquo;</> : "No products match these filters"}
+                    {state.search ? <>Nothing here matches &ldquo;{state.search}&rdquo;</> : "No products match these filters"}
                   </h2>
                   <p className="mt-1 max-w-sm text-sm text-muted">
                     Try removing a filter, widening the price range or searching for something broader.
@@ -378,13 +383,13 @@ export function ShopView({
               Clear all
             </button>
             <button type="button" className="btn-primary flex-[1.4]" onClick={() => setDrawerOpen(false)}>
-              Show {results.length} {results.length === 1 ? "result" : "results"}
+              {pending ? resultsLabel : `Show ${resultsLabel}`}
             </button>
           </div>
         }
       >
         <div className="px-5">
-          <FilterPanel filters={filters} onChange={update} source={panelSource} hideCategory={!!lockedCategory} />
+          {panel}
         </div>
       </Dialog>
     </div>

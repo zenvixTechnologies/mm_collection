@@ -2,6 +2,7 @@
 
 import { Check } from "lucide-react";
 import type { Product, Size } from "@/types";
+import { colorSelectable, sizeInStock, unitsFor } from "@/lib/availability";
 import { cn } from "@/lib/utils";
 import type { PurchaseErrors } from "@/hooks/use-purchase";
 
@@ -17,6 +18,7 @@ interface VariantPickerProps {
 }
 
 export function VariantPicker({ product, size, color, onSize, onColor, errors, onSizeGuide, idPrefix }: VariantPickerProps) {
+  const colorSoldOut = !!color && product.stock > 0 && unitsFor(product, { color }) === 0;
   return (
     <div className="space-y-6">
       {/* Colour */}
@@ -28,24 +30,27 @@ export function VariantPicker({ product, size, color, onSize, onColor, errors, o
         <div className="flex flex-wrap gap-2.5">
           {product.colors.map((c) => {
             const selected = color === c.name;
+            const disabled = !colorSelectable(product, c.name);
             return (
               <label
                 key={c.name}
                 className={cn(
-                  "relative flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border-2 transition-all",
-                  selected ? "border-ink" : "border-transparent hover:border-line",
+                  "relative flex h-11 w-11 items-center justify-center rounded-full border-2 transition-all",
+                  disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer",
+                  selected ? "border-ink" : cn("border-transparent", !disabled && "hover:border-line"),
                   errors.color && !selected && "border-danger/40",
                 )}
-                title={c.name}
+                title={disabled ? `${c.name} — out of stock` : c.name}
               >
                 <input
                   type="radio"
                   name={`${idPrefix}-color`}
                   value={c.name}
                   checked={selected}
+                  disabled={disabled}
                   onChange={() => onColor(c.name)}
                   className="peer sr-only"
-                  aria-label={c.name}
+                  aria-label={disabled ? `${c.name}, out of stock` : c.name}
                 />
                 <span
                   className="flex h-8 w-8 items-center justify-center rounded-full border border-black/10 peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-2"
@@ -80,29 +85,36 @@ export function VariantPicker({ product, size, color, onSize, onColor, errors, o
         <div className="flex flex-wrap gap-2">
           {product.sizes.map((s) => {
             const selected = size === s;
+            const disabled = !sizeInStock(product, s, color);
             return (
-              <label key={s} className="cursor-pointer">
+              <label key={s} className={disabled ? "cursor-not-allowed" : "cursor-pointer"} title={disabled ? `${s} — out of stock${color ? ` in ${color}` : ""}` : undefined}>
                 <input
                   type="radio"
                   name={`${idPrefix}-size`}
                   value={s}
                   checked={selected}
+                  disabled={disabled}
                   onChange={() => onSize(s)}
                   className="peer sr-only"
                 />
                 <span
                   className={cn(
                     "flex h-11 min-w-12 items-center justify-center rounded-full border px-4 text-sm font-medium transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-2",
-                    selected ? "border-ink bg-ink text-white" : "border-line bg-white text-ink hover:border-ink",
-                    errors.size && !selected && "border-danger/50",
+                    disabled
+                      ? "border-dashed border-line bg-canvas text-subtle line-through"
+                      : selected
+                        ? "border-ink bg-ink text-white"
+                        : cn("border-line bg-white text-ink hover:border-ink", errors.size && "border-danger/50"),
                   )}
                 >
                   {s}
+                  {disabled && <span className="sr-only">, out of stock</span>}
                 </span>
               </label>
             );
           })}
         </div>
+        {colorSoldOut && !errors.size && <p className="mt-2 text-sm text-muted">No sizes are in stock in {color}. Try another colour.</p>}
         {errors.size && (
           <p id={`${idPrefix}-size-error`} className="field-error" role="alert">
             {errors.size}

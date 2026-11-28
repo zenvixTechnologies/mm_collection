@@ -18,6 +18,7 @@ import { PincodeChecker } from "./PincodeChecker";
 import { ColourDisclaimer } from "./ColourDisclaimer";
 import { SizeGuide } from "./SizeGuide";
 import { StockStatus } from "./StockStatus";
+import { useReportColour } from "./SelectedColour";
 import { VariantPicker } from "./VariantPicker";
 import { WishlistButton } from "./WishlistButton";
 
@@ -30,6 +31,8 @@ export function ProductPurchase({ product }: { product: Product }) {
   const undergarment = isUndergarment(product);
 
   useEffect(() => addRecent(product.id), [addRecent, product.id]);
+  const reportColour = useReportColour();
+  useEffect(() => reportColour?.(p.color), [reportColour, p.color]);
 
   /** If size/colour is missing, bring the picker (and its error) into view — matters most from the mobile sticky bar. */
   const revealOptions = () => {
@@ -77,7 +80,7 @@ export function ProductPurchase({ product }: { product: Product }) {
 
       <div id="pdp-variants" className="mt-7 scroll-mt-28">
         <VariantPicker
-          product={product}
+          product={p.product}
           size={p.size}
           color={p.color}
           onSize={p.setSize}
@@ -94,7 +97,7 @@ export function ProductPurchase({ product }: { product: Product }) {
           <p className="mb-2 text-sm font-semibold">Quantity</p>
           <QuantitySelector value={p.quantity} max={p.maxQty} onChange={p.setQuantity} />
         </div>
-        <StockStatus stock={product.stock} className="mt-7" />
+        <StockStatus stock={p.displayStock} className="mt-7" />
       </div>
 
       {/* Desktop / tablet actions */}

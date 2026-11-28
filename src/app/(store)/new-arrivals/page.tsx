@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { isAudience } from "@/data/audiences";
-import { getCatalog } from "@/server/services/catalog.service";
+import type { ListingScope } from "@/lib/listing";
+import { loadListing, type SearchParams } from "@/server/services/listing-page";
 import { ShopView } from "@/components/products/ShopView";
 
 export const metadata: Metadata = {
@@ -9,20 +9,19 @@ export const metadata: Metadata = {
   alternates: { canonical: "/new-arrivals" },
 };
 
-type Props = { searchParams: Promise<{ sort?: string; category?: string; for?: string }> };
+type Props = { searchParams: Promise<SearchParams> };
+
+const SCOPE: ListingScope = { newArrival: true, defaultSort: "newest" };
 
 export default async function NewArrivalsPage({ searchParams }: Props) {
-  const { sort, category, for: audience } = await searchParams;
-  const { getNewArrivals } = await getCatalog();
+  const initial = await loadListing("/new-arrivals", SCOPE, await searchParams);
   return (
     <ShopView
       title="New Arrivals"
       description="Fresh styles added this season — be the first to wear them."
       breadcrumbs={[{ label: "New Arrivals" }]}
-      products={getNewArrivals()}
-      initialSort={sort ?? "newest"}
-      initialCategory={category}
-      initialAudience={isAudience(audience) ? audience : undefined}
+      scope={SCOPE}
+      initial={initial}
     />
   );
 }

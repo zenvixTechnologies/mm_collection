@@ -6,7 +6,7 @@ import { SITE } from "@/lib/utils";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { ProductDetailsAccordion } from "@/components/products/ProductDetailsAccordion";
-import { ProductGallery } from "@/components/products/ProductGallery";
+import { ColourGallery, SelectedColourProvider } from "@/components/products/SelectedColour";
 import { ProductGrid } from "@/components/products/ProductGrid";
 import { ProductPurchase } from "@/components/products/ProductPurchase";
 import { ProductReviews } from "@/components/products/ProductReviews";
@@ -84,17 +84,20 @@ export default async function ProductPage({ params }: Params) {
             { label: product.name },
           ]}
         />
-        <div className="mt-5 grid gap-8 lg:mt-7 lg:grid-cols-[1.1fr_1fr] lg:gap-14">
-          <div className="lg:sticky lg:top-24 lg:self-start">
-            <ProductGallery images={product.images} name={product.name} />
-          </div>
-          <div>
-            <ProductPurchase product={product} />
-            <div className="mt-10">
-              <ProductDetailsAccordion product={product} />
+        {/* Keyed, so moving to another product never carries a colour across. */}
+        <SelectedColourProvider key={product.id} product={product}>
+          <div className="mt-5 grid gap-8 lg:mt-7 lg:grid-cols-[1.1fr_1fr] lg:gap-14">
+            <div className="lg:sticky lg:top-24 lg:self-start">
+              <ColourGallery product={product} />
+            </div>
+            <div>
+              <ProductPurchase product={product} />
+              <div className="mt-10">
+                <ProductDetailsAccordion product={product} />
+              </div>
             </div>
           </div>
-        </div>
+        </SelectedColourProvider>
 
         <div className="mt-20">
           <ProductReviews product={product} />

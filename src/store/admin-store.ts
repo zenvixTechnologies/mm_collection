@@ -119,6 +119,7 @@ export interface ProductPayload {
   shortDescription: string;
   description: string;
   images: AdminImage[];
+  colorImages: { color: string; images: AdminImage[] }[];
   pricePaise: number;
   mrpPaise: number;
   variants: { size: string | null; color: { name: string; hex: string } | null; initialStock?: number; lowStockThreshold: number }[];

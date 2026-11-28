@@ -51,3 +51,6 @@ export function paginationMeta(page: number, limit: number, total: number): Pagi
  * refreshing. Never use for anything personal (carts, accounts, orders, payments).
  */
 export const PUBLIC_CATALOG_CACHE = { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" };
+
+/** Filtered listings depend on stock, so the CDN may reuse them only briefly (about a minute at most). */
+export const PUBLIC_LISTING_CACHE = { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=30" };

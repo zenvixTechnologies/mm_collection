@@ -3,17 +3,20 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import type { Product, Size } from "@/types";
+import type { Size } from "@/types";
 import { useCatalog } from "@/components/catalog/CatalogProvider";
-import { ALL_SIZES, categoryFullName, productInCategory } from "@/lib/catalog-query";
+import { ALL_SIZES, categoryFullName } from "@/lib/catalog-query";
 import { DISCOUNT_OPTIONS, type Filters } from "@/lib/catalog";
+import type { ListingFacets } from "@/lib/listing";
 import { cn, formatPrice } from "@/lib/utils";
 
 interface FilterPanelProps {
   filters: Filters;
   onChange: (f: Filters) => void;
-  /** Products available before filtering — used to show only relevant options and counts. */
-  source: Product[];
+  /** The options and counts the server found for this listing. Chosen values always stay listed. */
+  options: ListingFacets;
+  /** Sub-categories of several audiences are on offer, so name them in full. */
+  mixed?: boolean;
   hideCategory?: boolean;
 }
 
@@ -29,15 +32,17 @@ function toggle<T>(list: T[], value: T) {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
 
-export function FilterPanel({ filters, onChange, source, hideCategory }: FilterPanelProps) {
+export function FilterPanel({ filters, onChange, options, mixed, hideCategory }: FilterPanelProps) {
   const set = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
   const { categories } = useCatalog();
 
-  const sizes = ALL_SIZES.filter((s) => source.some((p) => p.sizes.includes(s)));
-  const colors = Array.from(new Map(source.flatMap((p) => p.colors).map((c) => [c.name, c])).values());
-  const cats = categories.filter((c) => source.some((p) => productInCategory(p, c.id)));
-  // Mixed listings (Shop All) need "Men's Ethnic Wear" vs "Ethnic Wear" to tell sub-categories apart.
-  const mixed = new Set(source.map((p) => p.audienceCategory)).size > 1;
+  const sizes = ALL_SIZES.filter((s) => options.sizes.includes(s) || filters.sizes.includes(s));
+  const colors = [
+    ...options.colors,
+    ...filters.colors.filter((name) => !options.colors.some((c) => c.name === name)).map((name) => ({ name, hex: "#CCCCCC" })),
+  ];
+  const counts = new Map(options.categories.map((c) => [c.id, c.count]));
+  const cats = categories.filter((c) => counts.has(c.id) || filters.categories.includes(c.id));
   const [minIn, setMinIn] = useState(filters.minPrice?.toString() ?? "");
   const [maxIn, setMaxIn] = useState(filters.maxPrice?.toString() ?? "");
   // Keep the custom inputs in sync when the price filter changes elsewhere (chips, "Clear all").
@@ -64,8 +69,9 @@ export function FilterPanel({ filters, onChange, source, hideCategory }: FilterP
                 <Checkbox
                   checked={filters.categories.includes(c.id)}
                   onChange={() => set({ categories: toggle(filters.categories, c.id) })}
+                  // Mixed listings (Shop All) need "Men's Ethnic Wear" vs "Ethnic Wear" to tell sub-categories apart.
                   label={mixed ? categoryFullName(c) : c.name}
-                  count={source.filter((p) => productInCategory(p, c.id)).length}
+                  count={counts.get(c.id) ?? 0}
                 />
               </li>
             ))}
@@ -151,7 +157,7 @@ export function FilterPanel({ filters, onChange, source, hideCategory }: FilterP
         </Section>
       )}
 
-      <Section title="Colour" count={filters.colors.length}>
+      {colors.length > 0 && <Section title="Colour" count={filters.colors.length}>
         <div className="grid grid-cols-2 gap-1">
           {colors.map((c) => {
             const active = filters.colors.includes(c.name);
@@ -175,7 +181,7 @@ export function FilterPanel({ filters, onChange, source, hideCategory }: FilterP
             );
           })}
         </div>
-      </Section>
+      </Section>}
 
       <Section title="Availability" count={filters.inStockOnly ? 1 : 0}>
         <Checkbox checked={filters.inStockOnly} onChange={() => set({ inStockOnly: !filters.inStockOnly })} label="In stock only" />
@@ -196,10 +202,9 @@ export function FilterPanel({ filters, onChange, source, hideCategory }: FilterP
           ))}
         </ul>
       </Section>
-      {source.length > 0 && (
+      {options.price && (
         <p className="py-4 text-xs text-muted">
-          Prices range from {formatPrice(Math.min(...source.map((p) => p.price)))} to{" "}
-          {formatPrice(Math.max(...source.map((p) => p.price)))}
+          Prices range from {formatPrice(options.price.min)} to {formatPrice(options.price.max)}
         </p>
       )}
     </div>

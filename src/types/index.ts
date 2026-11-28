@@ -105,10 +105,16 @@ export interface Product {
   originalPrice: number;
   price: number;
   discount: number;
+  /** General product photos: product cards use the first, and colours without their own fall back to these. */
   images: string[];
+  /** Each colour's own photos, first = primary. Only colours that have some. */
+  colorImages?: { color: string; images: string[] }[];
   sizes: Size[];
   colors: ProductColor[];
+  /** Units available across all variants. */
   stock: number;
+  /** Each size/colour combination on sale and its available units (from the store's catalogue). */
+  variants?: ProductVariant[];
   rating: number;
   reviewCount: number;
   featured: boolean;
@@ -128,6 +134,13 @@ export interface Product {
   packageLength: number;
   packageWidth: number;
   packageHeight: number;
+}
+
+export interface ProductVariant {
+  size: Size | null;
+  color: string | null;
+  /** Available to buy: stock on hand minus units held by unpaid checkouts. */
+  stock: number;
 }
 
 export interface CartItem {

@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, ZoomIn } from "lucide-react";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { FALLBACK_IMAGE } from "@/data/images";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
@@ -12,9 +13,19 @@ import { ColourInfoButton } from "./ColourDisclaimer";
 
 const VIEW_LABELS = ["Front view", "Detail close-up", "Fabric close-up", "Additional view"];
 
-export function ProductGallery({ images, name }: { images: string[]; name: string }) {
-  const [index, setIndex] = useState(0);
+export function ProductGallery({ images: given, name, galleryKey = "", notice = null }: { images: string[]; name: string; galleryKey?: string; notice?: string | null }) {
+  const images = given.length ? given : [FALLBACK_IMAGE];
+  const [chosen, setIndex] = useState(0);
   const [zoom, setZoom] = useState<{ x: number; y: number } | null>(null);
+  // A different colour starts again at its first photo. Adjusted during render, so no frame shows
+  // the old position.
+  const [shownKey, setShownKey] = useState(galleryKey);
+  if (shownKey !== galleryKey) {
+    setShownKey(galleryKey);
+    setIndex(0);
+    setZoom(null);
+  }
+  const index = shownKey === galleryKey && chosen < images.length ? chosen : 0;
   const [lightbox, setLightbox] = useState(false);
   const touchX = useRef<number | null>(null);
   const hydrated = useHydrated();
@@ -65,7 +76,8 @@ export function ProductGallery({ images, name }: { images: string[]; name: strin
             touchX.current = null;
           }}
         >
-          <AnimatePresence initial={false} mode="popLayout">
+          {/* Keyed by colour: the previous colour's photo is removed at once, not faded out. */}
+          <AnimatePresence key={galleryKey} initial={false} mode="popLayout">
             <motion.div
               key={images[index]}
               className="absolute inset-0"
@@ -127,6 +139,11 @@ export function ProductGallery({ images, name }: { images: string[]; name: strin
         <p className="sr-only" aria-live="polite">
           Image {index + 1} of {images.length}
         </p>
+        {notice && (
+          <p className="mt-3 rounded-xl bg-gold-soft px-4 py-2.5 text-[13px] leading-5 text-ink" role="status">
+            {notice}
+          </p>
+        )}
       </div>
 
       {/* Rendered on <body>: inside the sticky gallery column its z-index couldn't rise above the header or the page. */}

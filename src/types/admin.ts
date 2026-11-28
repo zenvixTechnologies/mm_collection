@@ -26,7 +26,7 @@ export type ProductStatus = "active" | "draft" | "archived";
  * A catalogue product as the admin sees it. Category ids are plain strings here because the
  * admin can create new categories that the storefront's `CategoryId` union doesn't know yet.
  */
-export interface AdminProduct extends Omit<Product, "categoryId" | "tags"> {
+export interface AdminProduct extends Omit<Product, "categoryId" | "tags" | "variants"> {
   categoryId: string;
   tags: string[];
   status: ProductStatus;
@@ -35,7 +35,7 @@ export interface AdminProduct extends Omit<Product, "categoryId" | "tags"> {
   updatedAt: string;
   /** Size × colour variants with their own SKU and stock (from the API). */
   variants?: AdminVariant[];
-  /** Image details matching `images` by position (Cloudinary public ID etc.). */
+  /** Details of the product's general and colour photos, by URL (Cloudinary public ID etc.). */
   imageMeta?: AdminImage[];
   /** Units held by unpaid checkouts. */
   reserved?: number;

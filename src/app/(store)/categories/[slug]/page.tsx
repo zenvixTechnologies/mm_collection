@@ -2,13 +2,15 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAudience } from "@/data/audiences";
 import { categoryFullName } from "@/lib/catalog-query";
+import type { ListingScope } from "@/lib/listing";
 import { getCatalog } from "@/server/services/catalog.service";
+import { loadListing, type SearchParams } from "@/server/services/listing-page";
 import { AudienceHero } from "@/components/products/AudienceHero";
 import { ShopView } from "@/components/products/ShopView";
 
 type Props = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ sort?: string }>;
+  searchParams: Promise<SearchParams>;
 };
 
 export async function generateStaticParams() {
@@ -33,12 +35,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function CategoryPage({ params, searchParams }: Props) {
   const { slug } = await params;
-  const { sort } = await searchParams;
   const { getCategory, getProductsByCategory } = await getCatalog();
   const category = getCategory(slug);
   if (!category) notFound();
   const info = getAudience(category.audience);
   const list = getProductsByCategory(category.id);
+  const scope: ListingScope = { audience: category.audience, category: category.id, defaultSort: "featured" };
+  const initial = await loadListing(`/categories/${category.slug}`, scope, await searchParams);
 
   return (
     <ShopView
@@ -46,10 +49,8 @@ export default async function CategoryPage({ params, searchParams }: Props) {
       title={categoryFullName(category)}
       description={category.description}
       breadcrumbs={[{ label: info.title, href: info.href }, { label: category.name }]}
-      products={list}
-      initialSort={sort}
-      lockedCategory={category.id}
-      audience={category.audience}
+      scope={scope}
+      initial={initial}
       hero={
         <AudienceHero
           key="hero"
